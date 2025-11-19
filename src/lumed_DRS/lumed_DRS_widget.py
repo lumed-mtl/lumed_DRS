@@ -20,9 +20,15 @@ from PyQt5.QtWidgets import QDialog, QApplication, QLabel, QWidget, QMainWindow,
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtGui import QDoubleValidator, QIntValidator
 
+import orpl as op
 from maya_control import MayaSpectrometer, SpectroInfo # Maya spectrometer control functions
 from HL_2000_HP_232R_control import HL2000Lamp, LampInfo #Lamp control functions.
 from ui.Lumed_DRS_ui import Ui_Form
+
+try:
+    import oras.backend.external_trigger as ext
+except ModuleNotFoundError:
+    print(f"ORAS package not found")
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +48,6 @@ LOG_FORMAT = (
     "(%(filename)s:%(lineno)d) - "
     "%(message)s"
 )
-
 
 def configure_logger():
     """Configures the logger if lumed_HL_2000_HP_232R is launched as a module"""
@@ -84,6 +89,8 @@ class LumedDRSWidget(QWidget, Ui_Form):
         self.spectro_info: SpectroInfo = self.mayaspectro.info
         self.xaxis_file: str|None = None
         self.yaxis_file: str|None = None
+        self.xaxis_data: dict|None = None
+        self.yaxis_data: dict|None = None
         self.spectralon_file: str|None = None
         self.save_dir:  str|None = None
         self.acqname: str|None = None
@@ -121,6 +128,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
         self.pushButtonMeasureRamanDRS.clicked.connect(self.button_raman_DRS_acquisition)
         self.checkBoxSave.stateChanged.connect(self.update_ui)
         self.comboBoxAcqName.currentTextChanged.connect(self.display_saved_data)  #lambda _: self.display_saved_data()
+        self.comboBoxRamanProfile.currentTextChanged.connect(self.set_oras_profile) #automatically sets the new oras profile for raman acquisition when combobox selection is changed
         
     def find_lamp(self):
         logger.info("Looking for connected lamps")
@@ -166,7 +174,6 @@ class LumedDRSWidget(QWidget, Ui_Form):
             logger.error(e, exc_info=True)
         self.update_ui()
         
-    
     def connect_mayaspectro(self):
         logger.info("Connecting spectrometer")
         self.pushbtnConnectSpectro.setEnabled(False)
@@ -218,23 +225,64 @@ class LumedDRSWidget(QWidget, Ui_Form):
 
     #Calibration files selection
     def select_xaxis(self):
-        self.xaxis_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a file to set xaxis", filter=("Text files (*.txt)"))[0] #CHANGE FILTER PARAMETER
-        url = QUrl.fromLocalFile(self.xaxis_file)
-        print("xaxis file to be used:", url.fileName())
-        self.lineEditXaxisFile.setText(url.fileName()) # Display the selected Spectralon file
-
+        try:
+            self.xaxis_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a file to set xaxis", filter=("Text files (*.joblib)"))[0] #CHANGE FILTER PARAMETER
+            print('self.xaxis_files: ', self.xaxis_file, 'type: ', type(self.xaxis_file))
+            with open(self.xaxis_file, 'rb') as f:
+                self.xaxis_data = joblib.load(f)
+                print('data_file:', self.xaxis_data)
+                url = QUrl.fromLocalFile(self.xaxis_file)
+            print('url: ', url )
+            self.lineEditXaxisFile.setText(url.fileName()) # Display the selected xaxis file
+            logger.info("xaxis file to be used: %s", url.fileName())
+            return self.xaxis_data
+        except Exception as e: 
+            if type(self.xaxis_file) is str and (len(self.xaxis_file) == 0): # If True, file selection was canceled
+                logger.info("Canceled: No Raman xaxis file was selected")
+            logger.error(e, exc_info=True)
+            
     def select_yaxis(self):
-        self.yaxis_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a file to set yaxis", filter=("Text files (*.txt)"))[0] #CHANGE FILTER PARAMETER
-        url = QUrl.fromLocalFile(self.yaxis_file)
-        print("yaxis file to be used:", url.fileName())
-        self.lineEditYaxisFile.setText(url.fileName()) # Display the selected Spectralon file
+        try:
+            self.yaxis_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a file to set yaxis", filter=("Text files (*.joblib)"))[0] #CHANGE FILTER PARAMETER
+            print('self.yaxis_files: ', self.yaxis_file, 'type: ', type(self.yaxis_file))
+            with open(self.yaxis_file, 'rb') as f:
+                self.yaxis_data = joblib.load(f)
+                print('data_file:', self.yaxis_data)
+            url = QUrl.fromLocalFile(self.yaxis_file)
+            print('url: ', url )
+            self.lineEditYaxisFile.setText(url.fileName()) # Display the selected yaxis file
+            logger.info("Selected yaxis file: %s", url.fileName())
+            return self.yaxis_data
+        except Exception as e: 
+            if type(self.yaxis_file) is str and (len(self.yaxis_file) == 0): # If True, file selection was canceled
+                logger.info("Canceled: No Raman yaxis file was selected")
+            logger.error(e, exc_info=True)
 
     def select_spectralon(self):
-        self.spectralon_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a spectralon file", filter=("Text files (*.txt)"))[0] #CHANGE FILTER PARAMETER
-        url = QUrl.fromLocalFile(self.spectralon_file)
-        print("spectralon file to be used:", url.fileName())
-        self.lineEditSpectralonFile.setText(url.fileName()) # Display the selected Spectralon file 
-        self.checkBoxSpectralon.setCheckable(True) # Make the normalization check available 
+        try:
+            self.spectralon_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a spectralon file", filter=("Joblib files (*.joblib)"))[0] #CHANGE FILTER PARAMETER
+            print('self.spectralon_file: ', self.spectralon_file, 'type: ', type(self.spectralon_file))
+            with open(self.spectralon_file, 'rb') as f:
+                self.spectralon_data = joblib.load(f)
+                print('Spectralon data:', self.spectralon_data)
+            url = QUrl.fromLocalFile(self.spectralon_file)
+            print('url: ', url )
+            self.lineEditSpectralonFile.setText(url.fileName()) # Display the selected spectralon file
+            self.checkBoxSpectralon.setCheckable(True) # Make the normalization check available
+            logger.info("Selected spectralon file: %s", url.fileName())
+            return self.spectralon_data
+        except Exception as e: 
+            if type(self.spectralon_file) is str and (len(self.spectralon_file) == 0): # If True, file selection was canceled
+                logger.info("Canceled: No Spectralon file was selected")
+            logger.error(e, exc_info=True)
+        
+        
+        
+        # self.spectralon_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a spectralon file", filter=("Text files (*.txt)"))[0] #CHANGE FILTER PARAMETER
+        # url = QUrl.fromLocalFile(self.spectralon_file)
+        # print("spectralon file to be used:", url.fileName())
+        # self.lineEditSpectralonFile.setText(url.fileName()) # Display the selected Spectralon file 
+        # self.checkBoxSpectralon.setCheckable(True) # Make the normalization check available 
 
     #TODO
     #Add Raman profile and model selection HERE
@@ -251,7 +299,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
         print("Getting saved acquisitions data")
         self.saved_data_list = self.get_saved_acquisitions_data(directory=self.save_dir)
         print("Got saved acquisitions data")
-        self.construct_combobox(data_list= self.saved_data_list)
+        self.construct_acq_name_combobox(data_list= self.saved_data_list)
         self.update_ui()
 
     def save_acquisition(self, directory, acq_name, acq_comment, 
@@ -279,35 +327,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
             joblib.dump(saved_data, directory +'\\'+ filename)
         return saved_data
 
-    def get_saved_acquisitions_data(self, directory: str | None = None):
-        try: 
-            if directory is None:
-                directory = self.save_dir
-            data_list = []
-            if not directory:
-                return data_list
-            search_path = os.path.join(directory, "*.joblib") # Only .joblib files will be looked at
-            print("search_path:", search_path)
-            print("glob.glob(path):", glob.glob(search_path))
-            for i,file in enumerate(glob.glob(search_path)):
-                print(f"file {i}:", file)
-                if not os.path.exists(file): #See if path exists
-                    print("path doesn't exist")
-                    continue
-                with open(file, 'rb') as f:
-                    data_file = joblib.load(f)
-                    print(data_file)
-                    data_list.append(data_file) # load data)
-                    # self.acqnames_list.append(data_file['acquisition_name'])
-                    # self.comments_list.append(data_file['comment'])
-                    # TODO
-                    # Add DRS and Raman Data to be extracted from file
-            return data_list
-        except Exception as e:
-            logger.error(e, exc_info=True) 
-        
-
-    def update_combobox(self, acq_name: str, current_data: dict) -> None:
+    def update_acq_combobox(self, acq_name: str, current_data: dict) -> None:
         self.comboBoxAcqName.insertItem(0, acq_name, current_data)
         self.comboBoxAcqName.setCurrentIndex(0)
         #self.textEditComment.setPlainText(self.comboBoxAcqName.currentData()["comment"])
@@ -334,7 +354,17 @@ class LumedDRSWidget(QWidget, Ui_Form):
     #             self.textEditComment.setPlainText(self.comboBoxAcqName.currentData()["comment"])
     #             break #stop if the right acquisition name has been found
     
-    def construct_combobox(self, data_list: list | None = None):
+    def construct_raman_profile_combobox(self):
+        try:        
+            self.raman_profiles = self.get_raman_profiles()
+            self.comboBoxRamanProfile.clear()
+            for profile in self.raman_profiles:
+                self.comboBoxRamanProfile.addItem(profile)
+        except Exception as e:
+            logger.error(e, exc_info=True) 
+            
+
+    def construct_acq_name_combobox(self, data_list: list | None = None):
         try:
             if data_list is None:
                 data_list = self.saved_data_list
@@ -350,16 +380,43 @@ class LumedDRSWidget(QWidget, Ui_Form):
                     self.comboBoxAcqName.addItem(data['acquisition_name'], data) # the data is linked to each combobox
                 except Exception as e:
                     logger.error(e, exc_info=True) 
+                     
             self.comboBoxAcqName.blockSignals(False)
             self.comboBoxAcqName.setCurrentIndex(0) # Select the first index when combobox is constructed#########################################################
             print("After self.comboBoxAcqName.currentIndex(): ",self.comboBoxAcqName.currentIndex(), 'self.comboBoxAcqName.currentText():', self.comboBoxAcqName.currentText())
         except Exception as e:
             logger.error(e, exc_info=True) 
         self.update_ui()
-        
+
+    def get_saved_acquisitions_data(self, directory: str | None = None):
+        try: 
+            if directory is None:
+                directory = self.save_dir
+            data_list = []
+            if not directory:
+                return data_list
+            search_path = os.path.join(directory, "*.joblib") # Only .joblib files will be looked at
+            print("search_path:", search_path)
+            print("glob.glob(path):", glob.glob(search_path))
+            for i,file in enumerate(glob.glob(search_path)):
+                print(f"file {i}:", file)
+                if not os.path.exists(file): #See if path exists
+                    print("path doesn't exist")
+                    continue
+                with open(file, 'rb') as f:
+                    data_file = joblib.load(f)
+                    print(data_file)
+                    data_list.append(data_file) # load data)
+                    # self.acqnames_list.append(data_file['acquisition_name'])
+                    # self.comments_list.append(data_file['comment'])
+                    # TODO
+                    # Add DRS and Raman Data to be extracted from file
+            return data_list
+        except Exception as e:
+            logger.error(e, exc_info=True) 
 
     def get_acquisition_name(self) -> str:
-        self.acqname = self.lineEditAcqName.text()
+        self.acqname = self.lineEditAcqName.text().replace(" ", "_")
         self.acqnames_list.append(self.acqname)
         return self.acqname
     
@@ -380,6 +437,37 @@ class LumedDRSWidget(QWidget, Ui_Form):
         except Exception as _:
             return None
         return min_aec_exp, max_aec_exp, min_acq_exp, max_acq_exp, max_count, N_accumulations
+
+    def get_raman_profiles(self) -> list:
+        # Get a list of currently available profiles in oras
+        try:
+            self.raman_profiles = ext.get_profiles()
+        except Exception as e:
+            self.raman_profiles = [
+                    '1 x MPE - 50 mW.toml', 
+                    '1 x MPE - 100 mW.toml', 
+                    '2 x MPE - 100 mW.toml', 
+                    '2 x MPE - 150 mW.toml', 
+                    '5 x MPE - 150 mW.toml',
+                    'tylenol.toml']
+            logger.error(e, exc_info=True)            
+        return self.raman_profiles
+    
+    def get_exposure(self):
+        logger.info("Setting Exposure time to : %s", self.doubleSpinBoxExposure.value())
+        return self.doubleSpinBoxExposure.value()
+
+    def get_spectrum(self):
+        self.pushButtonMeasureRamanDRS.setEnabled(False)
+        logger.info("Acquiring spectrum")
+        if self.mayaspectro.isconnected:
+            wavelengths, intensities = self.mayaspectro.spectrum_acquisition(
+                self.get_exposure()
+            )
+            self.disp.ax.cla()  # Clears axis
+            self.disp.plot_basic_line(wavelengths, intensities, label=f"acquisition")
+            logger.info("Spectrum acquired")
+        self.update_ui()
 
     def AEC_extrapolation(self, shutter_position: int, min_aec_exp: float, max_aec_exp: float, min_acq_exp: float, max_acq_exp: float, target_count: int) -> float:
         """
@@ -513,10 +601,23 @@ class LumedDRSWidget(QWidget, Ui_Form):
         #     self.dspl.plot_basic_line(self.data[:,0],np.mean(self.data[:,1:], axis=1)[:,None], label=f"average", xlim = self.minxlim)
         self.pushButtonMeasureDRS.setEnabled(True)
         self.pushButtonMeasureDRS.setText("DRS")
-        self.update_combobox(acq_name, saved_data)
+        self.update_acq_combobox(acq_name, saved_data)
         self.update_ui()
 
-    def button_raman_acquisition():
+    def raman_acquisition(self):
+        try:
+            acq_name = self.get_acquisition_name()
+            comment = self.get_acquisition_comment()
+            ext.set_file_name(acq_name) #Sets the file name in ORAS
+            ext.set_comment(comment) #Sets the comment in ORAS
+            ext.start_acquisition(blocking = True) #Tells ORAS to start acquisition
+            # TODO add a function to get raman data in file saved by oras. save it to own 
+        except Exception as e:
+            logger.error(f"Error during Raman acquisition: {e}")
+            
+    def button_raman_acquisition(self):
+        self.update_ui()
+
         pass
 
     def button_raman_DRS_acquisition():
@@ -538,18 +639,6 @@ class LumedDRSWidget(QWidget, Ui_Form):
         self.pulse_timer.stop() #If a pulse is running and disable button is pressed, the pulse will be stopped
         self.update_ui()
 
-    def set_timed_pulse(self):
-        """A timed pulse controlled by the user"""
-        pulse_time = self.spinboxPulseDuration.value() #in milliseconds
-        self.enable_lamp()
-        self.pulse_timer.start(pulse_time) #wait the pulse time and then disable lamp     
-
-    # def set_shutter_position(self):
-    #     shutter_position = self.spinboxShutterPosition.value()
-    #     logger.info("Setting lamp shutter position : %s", shutter_position)
-    #     self.lamp.set_shutter_position(shutter_position)
-    #     self.update_ui()
-
     def find_spectro(self):
         logger.info("Looking for connected spectros")
         self.pushbtnFindSpectro.setEnabled(False)
@@ -569,21 +658,17 @@ class LumedDRSWidget(QWidget, Ui_Form):
         self.pushbtnFindSpectro.setIcon(fugue.icon("magnifier-left"))
         self.update_ui()
 
-    def get_exposure(self):
-        logger.info("Setting Exposure time to : %s", self.doubleSpinBoxExposure.value())
-        return self.doubleSpinBoxExposure.value()
+    def set_timed_pulse(self):
+        """A timed pulse controlled by the user"""
+        pulse_time = self.spinboxPulseDuration.value() #in milliseconds
+        self.enable_lamp()
+        self.pulse_timer.start(pulse_time) #wait the pulse time and then disable lamp     
 
-    def get_spectrum(self):
-        self.pushButtonMeasureRamanDRS.setEnabled(False)
-        logger.info("Acquiring spectrum")
-        if self.mayaspectro.isconnected:
-            wavelengths, intensities = self.mayaspectro.spectrum_acquisition(
-                self.get_exposure()
-            )
-            self.disp.ax.cla()  # Clears axis
-            self.disp.plot_basic_line(wavelengths, intensities, label=f"acquisition")
-            logger.info("Spectrum acquired")
-        self.update_ui()
+    # def set_shutter_position(self):
+    #     shutter_position = self.spinboxShutterPosition.value()
+    #     logger.info("Setting lamp shutter position : %s", shutter_position)
+    #     self.lamp.set_shutter_position(shutter_position)
+    #     self.update_ui()
 
     def set_initial_lamp_configurations(self):
         if self.lamp_info.is_connected:
@@ -629,6 +714,34 @@ class LumedDRSWidget(QWidget, Ui_Form):
             self.labelLampConnected.setText("Disabled")
             self.labelLampConnected.setStyleSheet("color:green")
     
+    def set_oras_profile(self):
+        try:
+            ext.set_profile(self.comboBoxRamanProfile.currentText())
+        except Exception as e:
+            logger.error(e, exc_info=True)
+
+    def set_oras_status(self):
+        try:
+            possible_oras_status = ['READY', 'NOT READY', 'ACQUIRING']
+            colors = ["color:green", "color:red","color:yellow"]
+            status = ext.get_system_status()
+            if status in possible_oras_status:
+                self.is_oras_linked = True
+                self.lineEditOrasStatus.setText('CONNECTED: ' + status)
+                self.lineEditOrasStatus.setStyleSheet(colors[possible_oras_status.index(status)])
+            else:
+                self.is_oras_linked = False
+                status = 'NOT CONNECTED'
+                self.lineEditOrasStatus.setText(status)
+                self.lineEditOrasStatus.setStyleSheet("color:red")
+        except Exception as e:
+            logger.error(e, exc_info=True)
+            self.is_oras_linked = False
+            status = 'NOT CONNECTED'
+            self.lineEditOrasStatus.setText(status)
+            self.lineEditOrasStatus.setStyleSheet("color:red")
+
+                        
     def update_ui(self):
         self.update_info() #Used to be for the lamp control widget
         # Enable/disable controls if lamp is connected or not
@@ -649,6 +762,8 @@ class LumedDRSWidget(QWidget, Ui_Form):
         self.pushButtonMeasureRaman.setEnabled(is_oras_linked)
         self.pushButtonMeasureRamanDRS.setEnabled(is_spectro_connected and is_lamp_connected and is_oras_linked)
         self.set_labels_connected(is_lamp_connected,is_spectro_connected)
+        self.construct_raman_profile_combobox()
+        self.set_oras_status()
         if (self.saved_data_list is not None) and (len(self.saved_data_list) > 0):
             self.display_saved_data()
 
