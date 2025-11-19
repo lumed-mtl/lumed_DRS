@@ -6,13 +6,13 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1290</width>
+    <width>1114</width>
     <height>838</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>670</width>
+    <width>929</width>
     <height>838</height>
    </size>
   </property>
@@ -596,7 +596,7 @@
     <rect>
      <x>30</x>
      <y>160</y>
-     <width>446</width>
+     <width>571</width>
      <height>58</height>
     </rect>
    </property>
@@ -615,6 +615,12 @@
          </sizepolicy>
         </property>
         <property name="minimumSize">
+         <size>
+          <width>101</width>
+          <height>23</height>
+         </size>
+        </property>
+        <property name="maximumSize">
          <size>
           <width>101</width>
           <height>23</height>
@@ -821,7 +827,7 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>306</width>
+           <width>308</width>
            <height>40</height>
           </rect>
          </property>
@@ -921,9 +927,9 @@
   <widget class="QGroupBox" name="groupBox">
    <property name="geometry">
     <rect>
-     <x>380</x>
-     <y>550</y>
-     <width>321</width>
+     <x>390</x>
+     <y>470</y>
+     <width>341</width>
      <height>151</height>
     </rect>
    </property>
@@ -1212,8 +1218,8 @@
   <widget class="QCheckBox" name="checkBoxSpectralon">
    <property name="geometry">
     <rect>
-     <x>520</x>
-     <y>740</y>
+     <x>610</x>
+     <y>680</y>
      <width>101</width>
      <height>31</height>
     </rect>
@@ -1228,7 +1234,7 @@ Normalisation</string>
     <rect>
      <x>30</x>
      <y>710</y>
-     <width>331</width>
+     <width>423</width>
      <height>106</height>
     </rect>
    </property>
@@ -1337,23 +1343,17 @@ color:green;</string>
       </property>
      </widget>
     </item>
+    <item>
+     <widget class="QCheckBox" name="checkBoxSave">
+      <property name="styleSheet">
+       <string notr="true">color:black;</string>
+      </property>
+      <property name="text">
+       <string>Save acquisition</string>
+      </property>
+     </widget>
+    </item>
    </layout>
-  </widget>
-  <widget class="QCheckBox" name="checkBoxSave">
-   <property name="geometry">
-    <rect>
-     <x>390</x>
-     <y>740</y>
-     <width>121</width>
-     <height>31</height>
-    </rect>
-   </property>
-   <property name="styleSheet">
-    <string notr="true">color:black;</string>
-   </property>
-   <property name="text">
-    <string>Save acquisition</string>
-   </property>
   </widget>
   <widget class="QWidget" name="verticalLayoutWidget_4">
    <property name="geometry">
@@ -1361,7 +1361,7 @@ color:green;</string>
      <x>240</x>
      <y>480</y>
      <width>104</width>
-     <height>56</height>
+     <height>51</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout_12">
@@ -1369,22 +1369,18 @@ color:green;</string>
      <number>0</number>
     </property>
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_12">
-      <item>
-       <widget class="QLabel" name="labelNumDRSAcq">
-        <property name="minimumSize">
-         <size>
-          <width>100</width>
-          <height>0</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>Number of DRS
+     <widget class="QLabel" name="labelNumDRSAcq">
+      <property name="minimumSize">
+       <size>
+        <width>100</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="text">
+       <string>Number of DRS
 accumulations:</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
+      </property>
+     </widget>
     </item>
     <item>
      <widget class="QLineEdit" name="lineEditNumDRSAcq">
