@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from threading import Lock
 import pyvisa #https://pyvisa.readthedocs.io/en/latest/api/resources.html#api-resources
 import time as tt
-import serial.tools.list_ports
+from serial.tools import list_ports
 logger = logging.getLogger()
 
 ERROR_CODES = {
@@ -46,7 +46,7 @@ class HL2000Lamp:
         """
         
         resources = self.resource_manage.list_resources_info()
-        ports = serial.tools.list_ports.comports()
+        ports = list_ports.comports()
         connected_lamps = {}
         counter = -1
         for k, v in resources.items():
