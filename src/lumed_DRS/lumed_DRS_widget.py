@@ -28,7 +28,7 @@ from ui.Lumed_DRS_ui import Ui_Form
 try:
     import oras.backend.external_trigger as ext
 except ModuleNotFoundError:
-    print(f"ORAS package not found")
+    print("ORAS package not found")
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
         self.acqnames_list: list = []
         self.comments_list: list = []
         self.saved_data_list: list = []
-        self.main_oras_dir: str = "C:\\Users\\nerfi\\oras" # "/home/lumed/oras/"
+        self.main_oras_dir: str = "/home/lumed/oras/" #"C://Users//nerfi//oras//"
         # ui parameters
         self.setup_default_ui()
         self.connect_ui_signals()
@@ -129,8 +129,8 @@ class LumedDRSWidget(QWidget, Ui_Form):
         self.pushButtonMeasureRamanDRS.clicked.connect(self.button_raman_DRS_acquisition)
         self.checkBoxSave.stateChanged.connect(self.update_ui)
         self.comboBoxAcqName.currentTextChanged.connect(self.display_saved_data)  #lambda _: self.display_saved_data()
-        self.comboBoxRamanProfile.currentTextChanged.connect(self.set_oras_profile) #automatically sets the new oras profile for raman acquisition when combobox selection is changed
-        
+        self.comboBoxRamanProfile.currentTextChanged.connect(self.set_oras_profile) # automatically sets the new oras profile for raman acquisition when combobox selection is changed
+
     def find_lamp(self):
         logger.info("Looking for connected lamps")
         self.pushbtnFindLamp.setEnabled(False)
@@ -610,14 +610,14 @@ class LumedDRSWidget(QWidget, Ui_Form):
         self.pushButtonMeasureDRS.setText("DRS")
         self.update_acq_combobox(acq_name, saved_data)
         self.update_ui()
-
-    def get_latest_raman_data(self):
-        folders_dir = self.main_oras_dir + '\\data'
+    
+    def get_latest_raman_files(self):
+        folders_dir = self.main_oras_dir + 'data'
+        logger.info(f"Looking into following folder for Raman data: {folders_dir}")
         walk = os.walk(folders_dir) #top down walk of directory content in tuples of (root,dirs,files)
         data_paths = []
         for (root,dirs,files) in walk:
-            file_dirs  = [root+ f"\\{f}" for f in files if (f.endswith('.joblib') or f.endswith('.toml'))]
-            print(files)
+            file_dirs  = [root+ f"/{f}" for f in files if (f.endswith('.joblib') or f.endswith('.toml'))]
             data_paths+= file_dirs
         def extension_key(data):
             if data.endswith('.joblib'):
@@ -630,11 +630,6 @@ class LumedDRSWidget(QWidget, Ui_Form):
         logger.info(f"Most recent .joblib file found: {joblib_file}")
         logger.info(f"Most recent .toml file found: {toml_file}")
         return joblib_file, toml_file
-
-    def get_latest_raman_folder(self):
-        self.oras_data_folder = max([f.path for f in os.scandir(f"{self.main_oras_dir}/data") if f.is_dir()], key=os.path.getmtime)
-        if self.oras_data_folder is None:
-            tt.sleep(1)
         
     def raman_acquisition(self):
         try:
