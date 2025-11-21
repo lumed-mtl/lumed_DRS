@@ -97,6 +97,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
         self.acqnames_list: list = []
         self.comments_list: list = []
         self.saved_data_list: list = []
+        self.main_oras_dir: str = "C:\\Users\\nerfi\\oras" # "/home/lumed/oras/"
         # ui parameters
         self.setup_default_ui()
         self.connect_ui_signals()
@@ -158,6 +159,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
             self.set_initial_lamp_configurations()
             #self.update_timer.start()
         except Exception as e:
+            logger.info("Lamp not available")
             logger.error(e, exc_info=True)
         self.update_ui()
         
@@ -208,6 +210,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
             except Exception as e:
                 logger.error(e, exc_info=True)
         else:
+            logger.info("Maya spectrometer not available")
             print("Maya spectrometer not available")
         self.update_ui()
 
@@ -357,6 +360,8 @@ class LumedDRSWidget(QWidget, Ui_Form):
     def construct_raman_profile_combobox(self):
         try:        
             self.raman_profiles = self.get_raman_profiles()
+            if type(self.raman_profiles) == ConnectionRefusedError:
+                raise ConnectionRefusedError(f"self.raman_profiles")
             self.comboBoxRamanProfile.clear()
             for profile in self.raman_profiles:
                 self.comboBoxRamanProfile.addItem(profile)
@@ -442,6 +447,8 @@ class LumedDRSWidget(QWidget, Ui_Form):
         # Get a list of currently available profiles in oras
         try:
             self.raman_profiles = ext.get_profiles()
+            if type(self.raman_profiles) == ConnectionRefusedError:
+                raise ConnectionRefusedError(self.raman_profiles)
         except Exception as e:
             self.raman_profiles = [
                     '1 x MPE - 50 mW.toml', 
@@ -604,6 +611,31 @@ class LumedDRSWidget(QWidget, Ui_Form):
         self.update_acq_combobox(acq_name, saved_data)
         self.update_ui()
 
+    def get_latest_raman_data(self):
+        folders_dir = self.main_oras_dir + '\\data'
+        walk = os.walk(folders_dir) #top down walk of directory content in tuples of (root,dirs,files)
+        data_paths = []
+        for (root,dirs,files) in walk:
+            file_dirs  = [root+ f"\\{f}" for f in files if (f.endswith('.joblib') or f.endswith('.toml'))]
+            print(files)
+            data_paths+= file_dirs
+        def extension_key(data):
+            if data.endswith('.joblib'):
+                return 0
+            elif data.endswith('.toml'):
+                return 1
+        most_recent_data = sorted(data_paths, key=os.path.getmtime, reverse = True) # Sort all files according to their timestamp 
+        extension_sorted_files = sorted(most_recent_data[0:2], key=extension_key)  # Sort files according to their extension (.toml or .joblib)
+        joblib_file, toml_file = extension_sorted_files[0], extension_sorted_files[1]
+        logger.info(f"Most recent .joblib file found: {joblib_file}")
+        logger.info(f"Most recent .toml file found: {toml_file}")
+        return joblib_file, toml_file
+
+    def get_latest_raman_folder(self):
+        self.oras_data_folder = max([f.path for f in os.scandir(f"{self.main_oras_dir}/data") if f.is_dir()], key=os.path.getmtime)
+        if self.oras_data_folder is None:
+            tt.sleep(1)
+        
     def raman_acquisition(self):
         try:
             acq_name = self.get_acquisition_name()
@@ -611,6 +643,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
             ext.set_file_name(acq_name) #Sets the file name in ORAS
             ext.set_comment(comment) #Sets the comment in ORAS
             ext.start_acquisition(blocking = True) #Tells ORAS to start acquisition
+            
             # TODO add a function to get raman data in file saved by oras. save it to own 
         except Exception as e:
             logger.error(f"Error during Raman acquisition: {e}")
@@ -716,7 +749,9 @@ class LumedDRSWidget(QWidget, Ui_Form):
     
     def set_oras_profile(self):
         try:
-            ext.set_profile(self.comboBoxRamanProfile.currentText())
+            set_oras_profile_message = ext.set_profile(self.comboBoxRamanProfile.currentText())
+            if type(set_oras_profile_message) == ConnectionRefusedError:
+                raise ConnectionRefusedError(set_oras_profile_message)
         except Exception as e:
             logger.error(e, exc_info=True)
 
@@ -725,6 +760,9 @@ class LumedDRSWidget(QWidget, Ui_Form):
             possible_oras_status = ['READY', 'NOT READY', 'ACQUIRING']
             colors = ["color:green", "color:red","color:yellow"]
             status = ext.get_system_status()
+            if type(status) == ConnectionRefusedError:
+                print('-----here--------')
+                raise ConnectionRefusedError(status)
             if status in possible_oras_status:
                 self.is_oras_linked = True
                 self.lineEditOrasStatus.setText('CONNECTED: ' + status)
@@ -734,7 +772,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
                 status = 'NOT CONNECTED'
                 self.lineEditOrasStatus.setText(status)
                 self.lineEditOrasStatus.setStyleSheet("color:red")
-        except Exception as e:
+        except ConnectionRefusedError as e:
             logger.error(e, exc_info=True)
             self.is_oras_linked = False
             status = 'NOT CONNECTED'
