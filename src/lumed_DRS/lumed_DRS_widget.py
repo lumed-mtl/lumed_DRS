@@ -10,6 +10,7 @@ from time import strftime
 import datetime as dt
 import time as tt
 import joblib
+import tomli
 import glob
 import os
 
@@ -97,7 +98,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
         self.acqnames_list: list = []
         self.comments_list: list = []
         self.saved_data_list: list = []
-        self.main_oras_dir: str = "/home/lumed/oras/" #"C://Users//nerfi//oras//"
+        self.main_oras_dir: str = "C:/Users/nerfi/oras/" #"/home/lumed/oras/" #
         # ui parameters
         self.setup_default_ui()
         self.connect_ui_signals()
@@ -307,7 +308,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
 
     def save_acquisition(self, directory, acq_name, acq_comment, 
                          DRS_background = None, xaxis_DRS = None, DRS_data = None, 
-                         raman_background = None,  xaxis_raman = None, raman_data = None):
+                         DRS_exposure = None, raman_background = None,  xaxis_raman = None, raman_data = None, raman_exposure = None):
         """
         Structures data into a dictionnary and saved into .joblib file.
         inputs
@@ -321,13 +322,17 @@ class LumedDRSWidget(QWidget, Ui_Form):
         saved_data['DRS_background'] = DRS_background
         saved_data['xaxis_DRS'] = xaxis_DRS
         saved_data['drs_data'] = DRS_data
+        saved_data['drs_exposure'] = DRS_exposure
         saved_data['raman_background'] = raman_background
         saved_data['xaxis_raman'] = xaxis_raman
         saved_data['raman_data'] = raman_data
+        saved_data['raman_exposure'] = raman_exposure
         self.saved_data_list.append(saved_data) #add newer data to list of saved data to be displayed on ui
-        filename = acq_name.replace(" ", "_")+".joblib" #make name into snakecase
-        with open(directory+'\\'+filename, 'w') as f:# Save data in .joblib file
-            joblib.dump(saved_data, directory +'\\'+ filename)
+        if self.checkBoxSave.isChecked() == True:
+            filename = acq_name.replace(" ", "_")+".joblib" #make name into snakecase
+            with open(directory+'\\'+filename, 'w') as f:# Save data in .joblib file
+                joblib.dump(saved_data, directory +'\\'+ filename)
+            logger.info(f"Saved at {directory +'\\'+ filename}")
         return saved_data
 
     def update_acq_combobox(self, acq_name: str, current_data: dict) -> None:
@@ -476,6 +481,36 @@ class LumedDRSWidget(QWidget, Ui_Form):
             logger.info("Spectrum acquired")
         self.update_ui()
 
+    def get_latest_raman_files(self):
+        folders_dir = self.main_oras_dir + 'data'
+        logger.info(f"Looking into following folder for Raman data: {folders_dir}")
+        walk = os.walk(folders_dir) #top down walk of directory content in tuples of (root,dirs,files)
+        data_paths = []
+        for (root,dirs,files) in walk:
+            file_dirs  = [root+ f"/{f}" for f in files if (f.endswith('.joblib') or f.endswith('.toml'))]
+            data_paths+= file_dirs
+        def extension_key(data):
+            if data.endswith('.joblib'):
+                return 0
+            elif data.endswith('.toml'):
+                return 1
+        most_recent_data = sorted(data_paths, key=os.path.getmtime, reverse = True) # Sort all files according to their timestamp 
+        extension_sorted_files = sorted(most_recent_data[0:2], key=extension_key)  # Sort files according to their extension (.toml or .joblib)
+        joblib_file, toml_file = extension_sorted_files[0], extension_sorted_files[1]
+        logger.info(f"Most recent .joblib file found: {joblib_file}")
+        logger.info(f"Most recent .toml file found: {toml_file}")
+        return joblib_file, toml_file
+    
+    def get_latest_raman_data(self):
+        joblib_file, toml_file = self.get_latest_raman_files()
+        data_file = joblib.load(joblib_file)
+        toml_dict = tomli.load(toml_file)
+        raman_xaxis= data_file['xaxis']
+        raman_bkg = data_file['background']
+        raman_accumulations= data_file['accumulations']
+        raman_exposure= toml_dict['acquisition_profile']['exposure_time'] # ms
+        return raman_xaxis, raman_bkg, raman_accumulations, raman_exposure
+    
     def AEC_extrapolation(self, shutter_position: int, min_aec_exp: float, max_aec_exp: float, min_acq_exp: float, max_acq_exp: float, target_count: int) -> float:
         """
         This automatic exposure control algorithm tries to ba faster than AEC() by measuring two values of max count with their associated 
@@ -537,7 +572,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
         print(f"Target count: {target_count} used to find\noptimal exposure: {optimal_exp}ms, got max count of {obtained_target_count}", )
         return optimal_exp  
 
-    def background_acquisition(self, exposure): 
+    def DRS_background_acquisition(self, exposure): 
         self.disable_lamp() # Stop illumination
         wavelengths, bkg_intensity = self.mayaspectro.spectrum_acquisition(exposure)
         return wavelengths, bkg_intensity
@@ -555,7 +590,7 @@ class LumedDRSWidget(QWidget, Ui_Form):
         
         self.lineEditSetExposure.setText(str(int(aec_exposure)))
         # Proceed with the measurement including background signal
-        xaxis_DRS, DRS_background = self.background_acquisition(aec_exposure) #background to be substracted from normal acquisition
+        xaxis_DRS, DRS_background = self.DRS_background_acquisition(aec_exposure) #background to be substracted from normal acquisition
         self.enable_lamp()
         for i in range(N_accumulations):
             xaxis_DRS, intensity = self.mayaspectro.spectrum_acquisition(aec_exposure)
@@ -564,25 +599,23 @@ class LumedDRSWidget(QWidget, Ui_Form):
             else:
                 DRS_data = np.hstack((DRS_data, np.atleast_2d(intensity-DRS_background).T))
         self.disable_lamp()
-        return DRS_background, xaxis_DRS, DRS_data
+        return DRS_background, xaxis_DRS, DRS_data, aec_exposure
 
     def button_DRS_acquisition(self):
         # Turn on measuring and tell user it is measuring
         self.pushButtonMeasureDRS.setEnabled(False)
-        print(f"Measuring... with {self.checkBoxSave.isChecked()} for saving")
         self.pushButtonMeasureDRS.setText("Measuring...")
-        DRS_background, xaxis_DRS, DRS_data  = self.DRS_acquisition()
-        if self.checkBoxSave.isChecked() == True:
-            # Get info
-            raman_background = None 
-            xaxis_raman= None
-            raman_data = None   
-            acq_name = self.get_acquisition_name()
-            acq_comment = self.get_acquisition_comment()
-            print('acq_comment: ', acq_comment)
+        DRS_background, xaxis_DRS, DRS_data, DRS_exposure  = self.DRS_acquisition()
+        
+        # Get info
+        acq_name = self.get_acquisition_name()
+        acq_comment = self.get_acquisition_comment()
+        print('acq_comment: ', acq_comment)
 
-            saved_data = self.save_acquisition(self.save_dir, acq_name, acq_comment, 
-                                               DRS_background = DRS_background, xaxis_DRS = xaxis_DRS, DRS_data = DRS_data)
+        saved_data = self.save_acquisition(self.save_dir, acq_name, acq_comment, 
+                                            DRS_background = DRS_background, xaxis_DRS = xaxis_DRS, 
+                                            DRS_data = DRS_data, DRS_exposure = DRS_exposure)
+        self.update_acq_combobox(acq_name, saved_data)
         # TODO
         # Display measurment 
         # # Normalize data if checkbox is checked
@@ -608,29 +641,9 @@ class LumedDRSWidget(QWidget, Ui_Form):
         #     self.dspl.plot_basic_line(self.data[:,0],np.mean(self.data[:,1:], axis=1)[:,None], label=f"average", xlim = self.minxlim)
         self.pushButtonMeasureDRS.setEnabled(True)
         self.pushButtonMeasureDRS.setText("DRS")
-        self.update_acq_combobox(acq_name, saved_data)
+        
         self.update_ui()
     
-    def get_latest_raman_files(self):
-        folders_dir = self.main_oras_dir + 'data'
-        logger.info(f"Looking into following folder for Raman data: {folders_dir}")
-        walk = os.walk(folders_dir) #top down walk of directory content in tuples of (root,dirs,files)
-        data_paths = []
-        for (root,dirs,files) in walk:
-            file_dirs  = [root+ f"/{f}" for f in files if (f.endswith('.joblib') or f.endswith('.toml'))]
-            data_paths+= file_dirs
-        def extension_key(data):
-            if data.endswith('.joblib'):
-                return 0
-            elif data.endswith('.toml'):
-                return 1
-        most_recent_data = sorted(data_paths, key=os.path.getmtime, reverse = True) # Sort all files according to their timestamp 
-        extension_sorted_files = sorted(most_recent_data[0:2], key=extension_key)  # Sort files according to their extension (.toml or .joblib)
-        joblib_file, toml_file = extension_sorted_files[0], extension_sorted_files[1]
-        logger.info(f"Most recent .joblib file found: {joblib_file}")
-        logger.info(f"Most recent .toml file found: {toml_file}")
-        return joblib_file, toml_file
-        
     def raman_acquisition(self):
         try:
             acq_name = self.get_acquisition_name()
@@ -644,9 +657,23 @@ class LumedDRSWidget(QWidget, Ui_Form):
             logger.error(f"Error during Raman acquisition: {e}")
             
     def button_raman_acquisition(self):
+        try:
+            self.pushButtonMeasureRaman.setEnabled(False)
+            self.pushButtonMeasureRaman.setText("Measuring...")
+            self.raman_acquisition(self)
+            acq_name = self.get_acquisition_name()
+            acq_comment = self.get_acquisition_comment()
+            raman_xaxis, raman_bkg, raman_accumulations, raman_exposure = self.get_latest_raman_data()
+            saved_data = self.save_acquisition(self.save_dir, acq_name, acq_comment,
+                                            raman_background = raman_bkg,  xaxis_raman = raman_xaxis, 
+                                            raman_data = raman_accumulations, raman_exposure=raman_exposure)
+            self.update_acq_combobox(acq_name, saved_data)
+            logger.info(f"Raman acquisition done")
+        except Exception as e:
+            logger.error(f"Error during Raman acquisition: {e}")
+        self.pushButtonMeasureRaman.setEnabled(True)
+        self.pushButtonMeasureRaman.setText("Raman")
         self.update_ui()
-
-        pass
 
     def button_raman_DRS_acquisition():
         pass
