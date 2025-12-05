@@ -6,13 +6,13 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1114</width>
-    <height>838</height>
+    <width>1329</width>
+    <height>863</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>929</width>
+    <width>1329</width>
     <height>838</height>
    </size>
   </property>
@@ -927,8 +927,8 @@
   <widget class="QGroupBox" name="groupBox">
    <property name="geometry">
     <rect>
-     <x>390</x>
-     <y>470</y>
+     <x>480</x>
+     <y>690</y>
      <width>341</width>
      <height>151</height>
     </rect>
@@ -1218,8 +1218,8 @@
   <widget class="QCheckBox" name="checkBoxSpectralon">
    <property name="geometry">
     <rect>
-     <x>610</x>
-     <y>680</y>
+     <x>1140</x>
+     <y>740</y>
      <width>101</width>
      <height>31</height>
     </rect>
@@ -1234,7 +1234,7 @@ Normalisation</string>
     <rect>
      <x>30</x>
      <y>710</y>
-     <width>423</width>
+     <width>429</width>
      <height>106</height>
     </rect>
    </property>
@@ -1361,7 +1361,7 @@ color:green;</string>
      <x>240</x>
      <y>480</y>
      <width>104</width>
-     <height>51</height>
+     <height>54</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout_12">
@@ -1406,27 +1406,34 @@ accumulations:</string>
     </item>
    </layout>
   </widget>
-  <widget class="QLabel" name="labelAcqComment">
+  <widget class="QTabWidget" name="tabWidgetPlotDisplay">
    <property name="geometry">
     <rect>
-     <x>1000</x>
-     <y>590</y>
-     <width>284</width>
-     <height>90</height>
+     <x>630</x>
+     <y>10</y>
+     <width>681</width>
+     <height>511</height>
     </rect>
    </property>
-   <property name="text">
-    <string/>
+   <property name="styleSheet">
+    <string notr="true"/>
    </property>
-   <property name="alignment">
-    <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+   <property name="currentIndex">
+    <number>0</number>
    </property>
-   <property name="wordWrap">
-    <bool>true</bool>
+   <property name="documentMode">
+    <bool>false</bool>
    </property>
-   <property name="textInteractionFlags">
-    <set>Qt::LinksAccessibleByKeyboard|Qt::LinksAccessibleByMouse|Qt::TextBrowserInteraction|Qt::TextEditable|Qt::TextEditorInteraction|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
-   </property>
+   <widget class="QWidget" name="RamanTab">
+    <attribute name="title">
+     <string>Raman</string>
+    </attribute>
+   </widget>
+   <widget class="QWidget" name="DRSTab">
+    <attribute name="title">
+     <string>DRS</string>
+    </attribute>
+   </widget>
   </widget>
  </widget>
  <resources/>
