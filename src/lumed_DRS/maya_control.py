@@ -2,7 +2,7 @@ import seabreeze
 from dataclasses import dataclass
 seabreeze.use("cseabreeze")
 from seabreeze.spectrometers import list_devices, Spectrometer
-
+import time as tt
 
 @dataclass
 class SpectroInfo:
@@ -44,6 +44,7 @@ class MayaSpectrometer:
         """
         self.spectro = Spectrometer(self.device)
         self.isconnected = True
+        self.spectro.trigger_mode(0)
         print(f"Connected to spectrometer: {self.spectro}")
 
     def spectrum_acquisition(self, exposure_time):
@@ -59,10 +60,11 @@ class MayaSpectrometer:
         """
         # Set exposure time
         self.spectro.integration_time_micros(
-            exposure_time * 1000
-        )  # *1000 because the exposure time is given in microseconds to the function
+            exposure_time * 1000)  # *1000 because the exposure time is given in microseconds to the function
         # Get wavelengths and intensities
-        return self.spectro.spectrum()
+        #x = self.spectro.spectrum() # Give time to the spectrometer to set integration time with a dummy read since hardware triggering is not possible at the moment
+        wavelengths, count = self.spectro.spectrum()
+        return wavelengths, count
 
     def disconnect(self):
         """Disconnect spectrometer"""
@@ -74,7 +76,7 @@ class MayaSpectrometer:
         return self.spectro.max_intensity
 
     def get_exposure_time_lims(self):
-        """Returns the upper and lower bounds of exposure time possible with the current spectrometer self.spectro"""
+        """Returns the upper and lower bounds on exposure time in seconds for the current spectrometer self.spectro"""
         return (
             self.spectro.integration_time_micros_limits[0] / 1000,
             self.spectro.integration_time_micros_limits[1] / 1000,
