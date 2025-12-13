@@ -223,7 +223,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
+oras/
 # Spyder project settings
 .spyderproject
 .spyproject
