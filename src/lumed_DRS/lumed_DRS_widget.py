@@ -30,7 +30,8 @@ from maya_control import MayaSpectrometer, SpectroInfo # Maya spectrometer contr
 from HL_2000_HP_232R_control import HL2000Lamp, LampInfo #Lamp control functions.
 from ui.Lumed_DRS_ui import Ui_Form
 from display_widget import DataDisplayWidget
-from worker import WorkerThread, LoopWorkerThread
+from worker import WorkerThread, LoopWorkerThread, CustomThread
+from arduino import Arduino
 import lumed_algos as la
 try:
     import oras.backend.external_trigger as ext
@@ -76,7 +77,6 @@ def configure_logger():
     #logger.setLevel(logging.DEBUG)
     # Prevent messages from being propagated to the root logger (and printed again)
     logger.propagate = False
-
 
 class LumedDRSWidget(QMainWindow, Ui_Form):
     """User Interface for HL_2000_HP_232R white light lamp control.
@@ -807,7 +807,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             ext.set_comment(comment) #Sets the comment in ORAS
             ext.start_acquisition(blocking = True) #Tells ORAS to start acquisition
             
-            # TODO add a function to get raman data in file saved by oras. save it to own 
+            # TODO add a function to get raman data in file saved by oras. save it to own directory
         except Exception as e:
             logger.error(f"Error during Raman acquisition: {e}")
             
@@ -920,7 +920,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
     def set_oras_status_loopworker(self):
         logger.info("Setting loop thread for oras status fetching")
         try:   
-            self.oras_loop_worker = LoopWorkerThread(self.test_oras_status_change)  # create a long-running LoopWorkerThread instance ext.get_system_status
+            self.oras_loop_worker = LoopWorkerThread(ext.get_system_status)  # create a long-running LoopWorkerThread instance, test method: self.test_oras_status_change
             self.threadpool.start(self.oras_loop_worker)
             self.oras_loop_worker.signals.result.connect(self.set_oras_status)
         except Exception as e:

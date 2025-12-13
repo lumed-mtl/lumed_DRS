@@ -120,7 +120,7 @@ class HL2000Lamp:
             f"connected = {self.isconnected}, "
             f"enabled = {self.isenabled}, "
             f"shutter position = {self.info.shutter_position} mA, "
-            f" coil temperature = {self.info.coil_temperature}C, "
+            f"coil temperature = {self.info.coil_temperature}C, "
         )
         return reprstr
     

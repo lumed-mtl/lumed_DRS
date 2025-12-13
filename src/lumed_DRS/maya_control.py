@@ -3,6 +3,13 @@ from dataclasses import dataclass
 seabreeze.use("cseabreeze")
 from seabreeze.spectrometers import list_devices, Spectrometer
 import time as tt
+import importlib.util
+from arduino import Arduino
+
+try:
+    from worker import CustomThread
+except ImportError:
+    pass
 
 @dataclass
 class SpectroInfo:
@@ -13,10 +20,18 @@ class SpectroInfo:
 class MayaSpectrometer:
 
     def __init__(self):
+        
         self.spectro: Spectrometer = None
+        self.arduino: Arduino = None
         self.device = None
         self.spectro_id: str = None
         self.isconnected = False
+        # Default trigger mode: 0
+        # 0 = Normal – Continuously scanning 
+        # 1 = External Hardware Level Trigger Mode 
+        # 2 = External Synchronous Trigger Mode 
+        # 3 = External Hardware Edge Trigger Mode     
+        self.trigger_mode = 0 
         self.info = SpectroInfo()
     def find_spectros(self):
         """
@@ -38,14 +53,34 @@ class MayaSpectrometer:
         else:
             return False
 
+    def set_trigger_mode(self, trig_mode):
+        spam_spec = importlib.util.find_spec("worker")
+        found_worker_module = spam_spec is not None
+        if found_worker_module:
+            self.trigger_mode = trig_mode
+            self.spectro.trigger_mode(self.trigger_mode) #set the trigger mode of intensity acquisition
+        else:
+            print("'worker' module was not found, spectrometer trigger mode set to default of '0'")
+            self.trigger_mode = 0
+            self.spectro.trigger_mode(self.trigger_mode) #set the trigger mode of intensity acquisition
+    
     def connect(self):
         """
         Connect to requested spectrometer
         """
-        self.spectro = Spectrometer(self.device)
-        self.isconnected = True
-        self.spectro.trigger_mode(0)
-        print(f"Connected to spectrometer: {self.spectro}")
+        try:
+            self.spectro = Spectrometer(self.device)
+            #connect arduino
+            self.arduino = Arduino()
+            self.arduino.find_arduino_device()
+            self.arduino.connect()
+            if self.arduino.isconnected: # arduino device exists
+                self.trigger_mode = 3 #set the trigger mode to external hardware if arduino is connected
+            self.isconnected = True
+            self.spectro.trigger_mode(self.trigger_mode) #set the trigger mode of intensity acquisition
+            print(f"Connected to spectrometer: {self.spectro}")
+        except Exception as e:
+            pass
 
     def spectrum_acquisition(self, exposure_time):
         """
@@ -61,13 +96,21 @@ class MayaSpectrometer:
         # Set exposure time
         self.spectro.integration_time_micros(
             exposure_time * 1000)  # *1000 because the exposure time is given in microseconds to the function
-        # Get wavelengths and intensities
-        #x = self.spectro.spectrum() # Give time to the spectrometer to set integration time with a dummy read since hardware triggering is not possible at the moment
-        wavelengths, count = self.spectro.spectrum()
-        return wavelengths, count
+        if self.trigger_mode == 3:
+            spectrum_thread = CustomThread(target=self.spectro.spectrum)
+            spectrum_thread.start()
+            #send trigger pulse with a delay
+            self.arduino.generate_pulse()     
+            wavelengths, counts = spectrum_thread.join()
+        else:
+            # Get wavelengths and intensities
+            wavelengths, counts = self.spectro.spectrum() 
+        return wavelengths, counts
 
     def disconnect(self):
         """Disconnect spectrometer"""
+        if self.arduino.isconnected:
+            self.arduino.disconnect()
         self.spectro.close()
         self.isconnected = False
         print(f"Disconnected from spectrometer: {self.spectro}")
@@ -105,22 +148,23 @@ class MayaSpectrometer:
             return SpectroInfo()
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
+    print("yoyoyo")
+    # import matplotlib.pyplot as plt
 
-    spectro = MayaSpectrometer()
-    spectro.device = spectro.find_spectros()[0]
-    print("available devices:", spectro.find_spectros())
-    print("Maya available:", spectro.is_spectro_available())
-    # spectro.connect2()
+    # spectro = MayaSpectrometer()
+    # spectro.device = spectro.find_spectros()[0]
+    # print("available devices:", spectro.find_spectros())
+    # print("Maya available:", spectro.is_spectro_available())
+    # # spectro.connect2()
+    # # print(type(spectro.spectro))
+    # spectro.connect()
     # print(type(spectro.spectro))
-    spectro.connect()
-    print(type(spectro.spectro))
-    print("Maya available2:", spectro.is_spectro_available())
-    print("Maya spectro max count:", spectro.get_max_intensity())
-    print("Maya exposure limits:", spectro.get_exposure_time_lims(), "ms")
-    exposure = 100
-    wavelengths, intensities = spectro.spectrum_acquisition(exposure)
-    spectro.disconnect()
-    plt.figure()
-    plt.plot(wavelengths, intensities)
-    plt.show()
+    # print("Maya available2:", spectro.is_spectro_available())
+    # print("Maya spectro max count:", spectro.get_max_intensity())
+    # print("Maya exposure limits:", spectro.get_exposure_time_lims(), "ms")
+    # exposure = 100
+    # wavelengths, intensities = spectro.spectrum_acquisition(exposure)
+    # spectro.disconnect()
+    # plt.figure()
+    # plt.plot(wavelengths, intensities)
+    # plt.show()

@@ -2,8 +2,24 @@ import sys
 import time as tt
 import traceback
 import threading
+from threading import Thread
 
 from PyQt5.QtCore import QObject, QThread, QRunnable, pyqtSignal, pyqtSlot
+
+
+class CustomThread(Thread):
+    def __init__(self, group=None, target=None, name=None,
+                 args=(), kwargs={}, Verbose=None):
+        Thread.__init__(self, group, target, name, args, kwargs)
+        self._return = None
+ 
+    def run(self):
+        if self._target is not None:
+            self._return = self._target(*self._args, **self._kwargs)
+             
+    def join(self, *args): # .join() method of Thread being overwritten to return
+        Thread.join(self, *args)
+        return self._return
 
 class WorkerSignals(QObject):
     """Signals from a running worker thread.
