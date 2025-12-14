@@ -104,6 +104,8 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.xaxis_raman =  None
         self.irf_raman = None
         self.spectralon_file: str|None = None
+        self.spectralon_data: dict|None = None
+        self.spectralon_spectrum: np.ndarray|None = None 
         self.save_dir:  str|None = None
         self.acqname: str|None = None
         self.acqnames_list: list = []
@@ -139,7 +141,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.pushbtnFindLamp.setIcon(fugue.icon("magnifier-left"))
         self.pushbtnFindSpectro.setIcon(fugue.icon("magnifier-left"))
         self.checkBoxSave.setChecked(True)
-        self.checkBoxSpectralon.setCheckable(False) # Make the normalization check unavailable until a spectralon file is selected 
+        self.groupBoxSpectralonNormalization.setEnabled(False) # Make the normalization check unavailable until a spectralon file is selected 
         #self.spinboxShutterPosition.setMaximum(400)  # max position of lamp shutter
     
     def connect_ui_signals(self):
@@ -157,9 +159,12 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.pushButtonMeasureRaman.clicked.connect(self.button_raman_acquisition)
         self.pushButtonMeasureRamanDRS.clicked.connect(self.display_test_data) # originaly self.button_raman_DRS_acquisition
         self.checkBoxSave.stateChanged.connect(self.update_ui)
+        self.radioButtonSelectedSpectralon.toggled.connect(self.display_saved_data)
+        self.radioButtonNativeSpectralon.toggled.connect(self.display_saved_data)
         self.comboBoxAcqName.currentTextChanged.connect(self.display_saved_data)  #lambda _: self.display_saved_data()
         self.comboBoxRamanProfile.currentTextChanged.connect(self.set_oras_profile) # automatically sets the new oras profile for raman acquisition when combobox selection is changed
-
+        self.groupBoxSpectralonNormalization.clicked.connect(self.display_saved_data)
+        self.radioButtonSelectedSpectralon.setChecked(True)
     def display_test_data(self):
         x = np.arange(100)
         mu = 0
@@ -397,22 +402,22 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
                 print('Spectralon data:', self.spectralon_data)
             url = QUrl.fromLocalFile(self.spectralon_file)
             print('url: ', url )
-            self.lineEditSpectralonFile.setText(url.fileName()) # Display the selected spectralon file
-            self.checkBoxSpectralon.setCheckable(True) # Make the normalization check available
+            self.lineEditSpectralonFile.setText(url.fileName()) # Display the selected spectralon file name
+            self.groupBoxSpectralonNormalization.setEnabled(True) # Make the normalization check available
             logger.info("Selected spectralon file: %s", url.fileName())
-            return self.spectralon_data
+            self.spectralon_spectrum = np.mean(self.spectralon_data['drs_data'], axis=1) - self.spectralon_data['drs_background']
+            return self.spectralon_spectrum
         except Exception as e: 
             if type(self.spectralon_file) is str and (len(self.spectralon_file) == 0): # If True, file selection was canceled
                 logger.info("Canceled: No Spectralon file was selected")
             logger.error(e, exc_info=True)
-        
-        
-        
-        # self.spectralon_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a spectralon file", filter=("Text files (*.txt)"))[0] #CHANGE FILTER PARAMETER
-        # url = QUrl.fromLocalFile(self.spectralon_file)
-        # print("spectralon file to be used:", url.fileName())
-        # self.lineEditSpectralonFile.setText(url.fileName()) # Display the selected Spectralon file 
-        # self.checkBoxSpectralon.setCheckable(True) # Make the normalization check available 
+
+    # def switch_radio_buttons(self):
+    #     if self.radioButtonNativeSpectralon.isChecked():
+    #         self.radioButtonSelectedSpectralon.setChecked(False)
+    #     elif self.radioButtonSelectedSpectralon.isChecked():
+    #         self.radioButtonNativeSpectralon.setChecked(False)
+
 
     #TODO
     #Add Raman profile and model selection HERE
@@ -433,7 +438,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.update_ui()
 
     def save_acquisition(self, directory, acq_name, acq_comment, 
-                         DRS_background = None, xaxis_DRS = None, DRS_data = None, 
+                         DRS_background = None, xaxis_DRS = None, DRS_data = None, DRS_spectralon = None,
                          DRS_exposure = None, raman_background = None,  xaxis_raman = None, raman_data = None, raman_exposure = None):
         """
         Structures data into a dictionnary and saved into .joblib file.
@@ -446,6 +451,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         saved_data['acquisition_name'] = acq_name
         saved_data['comment'] = acq_comment
         saved_data['drs_background'] = DRS_background
+        saved_data['drs_spectralon'] = DRS_spectralon
         saved_data['xaxis_DRS'] = xaxis_DRS
         saved_data['drs_data'] = DRS_data
         saved_data['drs_exposure'] = DRS_exposure
@@ -472,41 +478,51 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             print("self.comboBoxAcqName.currentData(): ", self.comboBoxAcqName.currentData())
             current_data = self.comboBoxAcqName.currentData()
             self.textEditComment.setPlainText(current_data["comment"]) #access the data linked to the combobox item
-            if current_data["drs_data"] is not None:
+            print("current_data:", current_data)
+            if current_data["drs_data"] is not None: #if current_data["drs_data"] is not None
                 DRS_background = current_data['drs_background']
-                DRS_spectrum = np.hstack((np.atleast_2d(DRS_background).T, current_data['drs_data']))
                 xaxis_DRS = current_data['xaxis_DRS']
                 labels = []
-                for i in range(DRS_spectrum.shape[1]):
-                    if i == 0:
-                        labels.append('background')
-                    else:
-                        labels.append(f"acquisition {i-1}")
+                if self.groupBoxSpectralonNormalization.isChecked() : # plot the normalized DRS data
+                    print("radioButtonNative checked:", self.radioButtonNativeSpectralon.isChecked())
+                    print("radioButtonSelected checked:", self.radioButtonSelectedSpectralon.isChecked())
+                    if self.radioButtonNativeSpectralon.isChecked() and (current_data['drs_spectralon'] is not None):
+                        print("current_data['drs_spectralon']:", current_data['drs_spectralon'])
+                        normalized_DRS = current_data['drs_data']/current_data['drs_spectralon'] #Use the current joblib file's spectralon data
+                    elif self.radioButtonSelectedSpectralon.isChecked() and self.spectralon_spectrum is not None:
+                        print("HEEEEEEEEEEEEEEERE self.spectralon_spectrum:", self.spectralon_spectrum)
+                        normalized_DRS = current_data['drs_data']/self.spectralon_spectrum[:, np.newaxis]  #Use the currently selected spectralon joblib file data
+                        print("normalized_DRS:", normalized_DRS)
+                    mean_normalized_DRS = np.mean(normalized_DRS, axis=1)
+                    DRS_spectrum = np.hstack((np.atleast_2d(mean_normalized_DRS).T, normalized_DRS))
+                    for i in range(DRS_spectrum.shape[1]):
+                        if i == 0:
+                            labels.append('mean')
+                        else:
+                            labels.append(f"acquisition {i-1}")
+                
+                else:
+                    DRS_spectrum = np.hstack((np.atleast_2d(DRS_background).T, current_data['drs_data']))
+                    for i in range(DRS_spectrum.shape[1]):
+                        if i == 0:
+                            labels.append('background')
+                        else:
+                            labels.append(f"acquisition {i-1}")
                 self.display_DRS.update_plot(xaxis_DRS, DRS_spectrum, labels)
+            else:
+                self.display_DRS.ax.cla() # if no DRS data to be displayed, clear axis
+
             if current_data["raman_data"] is not None:
                 raman_spectrum = (current_data['raman_data'] - current_data['raman_background'])
                 xaxis_raman = current_data['xaxis_raman']
                 self.irf = self.yaxis_data['raman_data']
                 raman_corr_irf = raman_spectrum/self.irf
                 self.display_raman.update_plot(xaxis_raman, raman_spectrum)
+            else:
+                self.display_raman.ax.cla() # if no raman data to be displayed, clear axis
                 
         except Exception as e:
             logger.error(e, exc_info=True) 
-        
-        # TODO 
-        # add display of spectra
-
-    # def display_saved_data(self, data_list: list | None = None):
-    #     print('data_list in display_data:', data_list)
-    #     if data_list is None:
-    #         data_list = self.saved_data_list
-    #     if not data_list:
-    #         return # do nothing if self.data_file_list is None 
-    #     acq_name = self.comboBoxAcqName.currentText()
-    #     for data in data_list:
-    #         if data['acquisition_name'] == acq_name:
-    #             self.textEditComment.setPlainText(self.comboBoxAcqName.currentData()["comment"])
-    #             break #stop if the right acquisition name has been found
     
     def construct_raman_profile_combobox(self):
         try:        
@@ -788,13 +804,14 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         # Get info
         
         print('acq_comment: ', acq_comment)
-        
         saved_data = self.save_acquisition(self.save_dir, acq_name, acq_comment, 
-                                            DRS_background = DRS_background, xaxis_DRS = xaxis_DRS, 
-                                            DRS_data = DRS_data, DRS_exposure = DRS_exposure)
+                                            DRS_spectralon = self.spectralon_spectrum, 
+                                            DRS_background = DRS_background, 
+                                            xaxis_DRS = xaxis_DRS, 
+                                            DRS_data = DRS_data, 
+                                            DRS_exposure = DRS_exposure)
         self.update_acq_combobox(acq_name, saved_data)
         self.is_measuring = False
-        #self.pushButtonMeasureDRS.setEnabled(not self.is_measuring)
         self.pushButtonMeasureDRS.setText("DRS")
         
         self.update_ui()
