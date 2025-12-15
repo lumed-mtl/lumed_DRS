@@ -141,6 +141,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.pushbtnFindLamp.setIcon(fugue.icon("magnifier-left"))
         self.pushbtnFindSpectro.setIcon(fugue.icon("magnifier-left"))
         self.checkBoxSave.setChecked(True)
+        self.groupBoxSpectralonNormalization.setChecked(False) # Make the normalization check unavailable until a spectralon file is selected 
         self.groupBoxSpectralonNormalization.setEnabled(False) # Make the normalization check unavailable until a spectralon file is selected 
         #self.spinboxShutterPosition.setMaximum(400)  # max position of lamp shutter
     
@@ -406,6 +407,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             self.groupBoxSpectralonNormalization.setEnabled(True) # Make the normalization check available
             logger.info("Selected spectralon file: %s", url.fileName())
             self.spectralon_spectrum = np.mean(self.spectralon_data['drs_data'], axis=1) - self.spectralon_data['drs_background']
+            print("spectralon data keys:", self.spectralon_data.keys(), self.spectralon_spectrum)
             return self.spectralon_spectrum
         except Exception as e: 
             if type(self.spectralon_file) is str and (len(self.spectralon_file) == 0): # If True, file selection was canceled
@@ -475,40 +477,47 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
 
     def display_saved_data(self):
         try:
-            print("self.comboBoxAcqName.currentData(): ", self.comboBoxAcqName.currentData())
             current_data = self.comboBoxAcqName.currentData()
             self.textEditComment.setPlainText(current_data["comment"]) #access the data linked to the combobox item
-            print("current_data:", current_data)
             if current_data["drs_data"] is not None: #if current_data["drs_data"] is not None
-                DRS_background = current_data['drs_background']
-                xaxis_DRS = current_data['xaxis_DRS']
-                labels = []
-                if self.groupBoxSpectralonNormalization.isChecked() : # plot the normalized DRS data
+                try:
+                    DRS_background = current_data['drs_background']
+                    xaxis_DRS = current_data['xaxis_DRS']
+                    labels = []
                     print("radioButtonNative checked:", self.radioButtonNativeSpectralon.isChecked())
                     print("radioButtonSelected checked:", self.radioButtonSelectedSpectralon.isChecked())
-                    if self.radioButtonNativeSpectralon.isChecked() and (current_data['drs_spectralon'] is not None):
-                        print("current_data['drs_spectralon']:", current_data['drs_spectralon'])
-                        normalized_DRS = current_data['drs_data']/current_data['drs_spectralon'] #Use the current joblib file's spectralon data
-                    elif self.radioButtonSelectedSpectralon.isChecked() and self.spectralon_spectrum is not None:
-                        print("HEEEEEEEEEEEEEEERE self.spectralon_spectrum:", self.spectralon_spectrum)
-                        normalized_DRS = current_data['drs_data']/self.spectralon_spectrum[:, np.newaxis]  #Use the currently selected spectralon joblib file data
-                        print("normalized_DRS:", normalized_DRS)
-                    mean_normalized_DRS = np.mean(normalized_DRS, axis=1)
-                    DRS_spectrum = np.hstack((np.atleast_2d(mean_normalized_DRS).T, normalized_DRS))
-                    for i in range(DRS_spectrum.shape[1]):
-                        if i == 0:
-                            labels.append('mean')
-                        else:
-                            labels.append(f"acquisition {i-1}")
-                
-                else:
-                    DRS_spectrum = np.hstack((np.atleast_2d(DRS_background).T, current_data['drs_data']))
-                    for i in range(DRS_spectrum.shape[1]):
-                        if i == 0:
-                            labels.append('background')
-                        else:
-                            labels.append(f"acquisition {i-1}")
-                self.display_DRS.update_plot(xaxis_DRS, DRS_spectrum, labels)
+                    print("SpectralonNormalization checked:", self.groupBoxSpectralonNormalization.isChecked())
+                    print("current_data.keys():", current_data.keys())
+                    if self.groupBoxSpectralonNormalization.isChecked() : # plot the normalized DRS data
+                        try:
+                            if self.radioButtonNativeSpectralon.isChecked() and (current_data['drs_spectralon'] is not None):
+                                print("current_data['drs_spectralon']:", current_data['drs_spectralon'].shape)
+                                normalized_DRS = (current_data['drs_data'] - current_data['drs_background'])/current_data['drs_spectralon'] #Use the current joblib file's spectralon data
+                            elif self.radioButtonSelectedSpectralon.isChecked() and self.spectralon_spectrum is not None:
+                                print("HEEEEEEEEEEEEEEERE self.spectralon_spectrum:", self.spectralon_spectrum.shape)
+                                normalized_DRS = (current_data['drs_data'] - current_data['drs_background'][:, np.newaxis])/self.spectralon_spectrum[:, np.newaxis]  #Use the currently selected spectralon joblib file data
+                                print("normalized_DRS:", normalized_DRS)
+                        except Exception as e:
+                            print("Error: No native spectralon spectrum in this file using loaded spectralon - ", e)
+                            normalized_DRS = (current_data['drs_data'] - current_data['drs_background'][:, np.newaxis])/self.spectralon_spectrum[:, np.newaxis]  #Use the currently selected spectralon joblib file data
+                        finally:
+                            mean_normalized_DRS = np.mean(normalized_DRS, axis=1)
+                            DRS_spectrum = np.hstack((normalized_DRS, np.atleast_2d(mean_normalized_DRS).T))
+                            for i in range(DRS_spectrum.shape[1]):
+                                if i == DRS_spectrum.shape[1]-1:
+                                    labels.append('mean')
+                                else:
+                                    labels.append(f"acquisition {i}")
+                    else:
+                        DRS_spectrum = np.hstack((np.atleast_2d(DRS_background).T, current_data['drs_data']))
+                        for i in range(DRS_spectrum.shape[1]):
+                            if i == 0:
+                                labels.append('background')
+                            else:
+                                labels.append(f"acquisition {i-1}")
+                    self.display_DRS.update_plot(xaxis_DRS, DRS_spectrum, labels)
+                except:
+                    self.display_DRS.ax.cla() # if no DRS data to be displayed, clear axis
             else:
                 self.display_DRS.ax.cla() # if no DRS data to be displayed, clear axis
 

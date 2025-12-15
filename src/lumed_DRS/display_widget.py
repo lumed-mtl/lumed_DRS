@@ -42,16 +42,15 @@ class DataDisplayWidget(QWidget):
 
     def add_plot(self, xdata, ydata, labels:list = None):
         self._plot_ref, = self.ax.plot(xdata, ydata)
+        if labels is not None:
+            self.ax.legend(labels)
     
     def update_plot(self, xdata, ydata, labels:list = None):
         colors = plt.cm.jet(np.linspace(0,1,ydata.shape[1])) # color gradient definition
         if self._plot_ref is None: 
             self._plot_ref = []
             for i in range(ydata.shape[1]):
-                self._plot_ref.append(self.ax.plot(xdata, ydata[:,i], color=colors[i])) # if first time plotting call plot method
-            
-            if labels is not None:
-                self.ax.legend(labels)
+                self._plot_ref.append(self.ax.plot(xdata, ydata[:,i], color=colors[i], labels = labels[i])) # if first time plotting call plot method
         elif len(self.ax.lines) >= ydata.shape[1]:
             #if number of lines is higher or equal than the newer data we want to plot
             N = ydata.shape[1]# Number of new line plots
@@ -61,7 +60,7 @@ class DataDisplayWidget(QWidget):
                 line.remove()
             # Set data in lines that remain with the new data
             for i in range(len(self.ax.lines)):
-                print('i:', i)
+                print('i:', i, "label:", labels[i])
                 self.ax.lines[i].set_ydata(ydata[:,i]) #update y data of plot instead of clearing the axes (faster)
                 self.ax.lines[i].set_color(colors[i])
                 if labels is not None:
@@ -81,7 +80,8 @@ class DataDisplayWidget(QWidget):
                     self.ax.lines[i].set_color(colors[i])
                     if labels is not None:
                         self.ax.lines[i].set_label(labels[i])
-
+        if labels is not None:
+            self.ax.legend() # Tell matplotlib to refresh the legend
         self.ax.relim() # Recompute the data limits based on current artists (from documentation)
         self.ax.autoscale()
         self.canvas.draw()
