@@ -47,7 +47,7 @@ void loop(){
   //Checks if there are bytes (characters) available for reading if that is the case the message is set to the received message 
   if (Serial.available()>0){
     receive_time = currentMillis;
-    received_msg = Serial.readStringUntil("\n"); //waits 200 ms for user input
+    received_msg = Serial.readStringUntil('\n'); //waits 100 ms for user input
     //Serial.println("received message: " + received_msg);
     //Serial.println("received time: " + String(receive_time));
     received_msg.trim();

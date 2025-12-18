@@ -84,7 +84,7 @@ class MayaSpectrometer:
             self.spectro.trigger_mode(self.trigger_mode) #set the trigger mode of intensity acquisition
             print(f"Connected to spectrometer: {self.spectro} with trigger mode set to {self.trigger_mode}")
         except Exception as e:
-            pass
+            print(f"Error spectrometer connection: {e}")
 
     def spectrum_acquisition(self, exposure_time):
         """

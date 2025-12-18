@@ -54,12 +54,13 @@ class HL2000Lamp:
             if "Bluetooth" in ports[counter].description:
                 #exclude blutooth COM ports
                 continue
-            time0 = tt.time()
             try:
                 device = self.resource_manage.open_resource(k)
-                device.timeout = 50
+                device.timeout =500
                 version = device.query("VER").strip()
-            except Exception as _:
+                print("version:", version)
+            except Exception as e:
+                print(f"Error: {e}")
                 continue
             if 'Version' in version:
                 connected_lamps[k] = {"resourceInfo": v, "version": version.strip()}
@@ -343,8 +344,6 @@ class HL2000Lamp:
             )
         except Exception as _:
             return LampInfo()
-        
-
 
 if __name__ == "__main__":
     print("START")
@@ -354,43 +353,43 @@ if __name__ == "__main__":
     print("find lamp time", time0-tt.time())
     print("Connected lamps:")
     print(list(connected_lamps))
-    lamp.comport = list(connected_lamps)[0]
-    print("comport:", lamp.comport)
-    print("Connecting lamp...")
-    lamp.connect()
-    lamp.set_shutter_position(-400) 
-    lamp.set_home_position() #Setting home posiiton (0) as position with shutter completely closed
-    print("real current after moving shutter to home position", lamp._safe_scpi_query('GRC').strip("\r\n"), "mA")
-    lamp.set_enable(True)
-    print("real current after enabling light", lamp._safe_scpi_query('GRC').strip("\r\n"), "mA")
-    print("Illumination open")
-    tt.sleep(1)
-    lamp._safe_scpi_write('SP1000')
-    print("Maximum velocity:", lamp._safe_scpi_query('GSP').strip("\r\n"))
-    print("Start loop")
+    # lamp.comport = list(connected_lamps)[0]
+    # print("comport:", lamp.comport)
+    # print("Connecting lamp...")
+    # lamp.connect()
+    # lamp.set_shutter_position(-400) 
+    # lamp.set_home_position() #Setting home posiiton (0) as position with shutter completely closed
+    # print("real current after moving shutter to home position", lamp._safe_scpi_query('GRC').strip("\r\n"), "mA")
+    # lamp.set_enable(True)
+    # print("real current after enabling light", lamp._safe_scpi_query('GRC').strip("\r\n"), "mA")
+    # print("Illumination open")
+    # tt.sleep(1)
+    # lamp._safe_scpi_write('SP1000')
+    # print("Maximum velocity:", lamp._safe_scpi_query('GSP').strip("\r\n"))
+    # print("Start loop")
     
-    for shutter_position in range(0,500,400):
-        tt.sleep(1)
-        print("Expected position:", shutter_position)
-        # motion_status, motion_status_dict = lamp.get_motion_control_status()
-        # print(motion_status)
-        # print("Posiiton state before:", motion_status_dict["Position state"])
-        lamp.set_shutter_position(shutter_position)
-        print("velocity sent", lamp._safe_scpi_query('GV').strip("\r\n"))
-        print("real current after moving shutter", lamp._safe_scpi_query('GRC').strip("\r\n"), "mA")
+    # for shutter_position in range(0,500,400):
+    #     tt.sleep(1)
+    #     print("Expected position:", shutter_position)
+    #     # motion_status, motion_status_dict = lamp.get_motion_control_status()
+    #     # print(motion_status)
+    #     # print("Posiiton state before:", motion_status_dict["Position state"])
+    #     lamp.set_shutter_position(shutter_position)
+    #     print("velocity sent", lamp._safe_scpi_query('GV').strip("\r\n"))
+    #     print("real current after moving shutter", lamp._safe_scpi_query('GRC').strip("\r\n"), "mA")
         
 
-        lamp_info = lamp.get_info()
-        print("lamp_info position:", lamp_info.shutter_position)
-        print("Current position:", lamp.get_shutter_position())
+    #     lamp_info = lamp.get_info()
+    #     print("lamp_info position:", lamp_info.shutter_position)
+    #     print("Current position:", lamp.get_shutter_position())
         
         
 
-    tt.sleep(0.1)
-    lamp.set_enable(False)
-    print("LAMP OFF")
-    lamp.disconnect()
-    print("Disconnected lamp")
+    # tt.sleep(0.1)
+    # lamp.set_enable(False)
+    # print("LAMP OFF")
+    # lamp.disconnect()
+    # print("Disconnected lamp")
 
     #lamp.comport = 'ASRL6::INSTR'
     # device = lamp.resource_manage.open_resource(lamp.comport)
