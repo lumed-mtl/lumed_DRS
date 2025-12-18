@@ -4,7 +4,7 @@ seabreeze.use("cseabreeze")
 from seabreeze.spectrometers import list_devices, Spectrometer
 import time as tt
 import importlib.util
-from arduino import Arduino
+from arduino_control import Arduino
 
 try:
     from worker import CustomThread

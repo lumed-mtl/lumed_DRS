@@ -31,7 +31,7 @@ from HL_2000_HP_232R_control import HL2000Lamp, LampInfo #Lamp control functions
 from ui.Lumed_DRS_ui import Ui_Form
 from display_widget import DataDisplayWidget
 from worker import WorkerThread, LoopWorkerThread, CustomThread
-from arduino import Arduino
+from arduino_control import Arduino
 import lumed_algos as la
 try:
     import oras.backend.external_trigger as ext
@@ -111,7 +111,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.acqnames_list: list = []
         self.comments_list: list = []
         self.saved_data_list: list = []
-        self.main_oras_dir: str = "C:/Users/nerfi/oras/" #"/home/lumed/oras/" #
+        self.main_oras_dir: str = "/home/lumed/oras/" #"C:/Users/nerfi/oras/" #
         #Setup display
         self.display_raman = DataDisplayWidget()
         self.verticalLayout_raman = QtWidgets.QVBoxLayout()
@@ -132,7 +132,6 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.set_oras_status_loopworker() # oras status is continuously being probed by a dedicated thread
         #self.setup_update_timer()
         self.setup_pulse_timer()
-        self.construct_raman_profile_combobox()
         self.update_ui()
         #Tylenol peaks for xaxis
         self.tylenol_peaks = np.array([390.9,  651.6,  797.2,  857.9, 1168.5, 1236.8,
@@ -474,16 +473,18 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         if self.checkBoxSave.isChecked() == True:
             print("in if checkbox")
             filename = acq_name.replace(" ", "_")+".joblib" #make name into snakecase
-            with open(directory+'\\'+filename, 'w') as f:# Save data in .joblib file
+            with open(directory+'/'+filename, 'w') as f:# Save data in .joblib file
                 print(f"Saving at {directory}\\{filename}")
-                joblib.dump(saved_data, directory +'\\'+ filename)
+                joblib.dump(saved_data, directory +'/'+ filename)
             logger.info(f"Saved at {directory}\\{filename}")
             print("finished saving")
         return saved_data
 
     def update_acq_combobox(self, acq_name: str, current_data: dict) -> None:
+        print("in update acq combobox")
         self.comboBoxAcqName.insertItem(0, acq_name, current_data)
         self.comboBoxAcqName.setCurrentIndex(0)
+        print("finished acq combobox")
         #self.textEditComment.setPlainText(self.comboBoxAcqName.currentData()["comment"])
 
     def display_saved_data(self):
@@ -658,30 +659,42 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         return self.doubleSpinBoxExposure.value()
     
     def get_latest_raman_files(self):
-        folders_dir = self.main_oras_dir + 'data'
-        logger.info(f"Looking into following folder for Raman data: {folders_dir}")
-        walk = os.walk(folders_dir) #top down walk of directory content in tuples of (root,dirs,files)
-        data_paths = []
-        for (root,dirs,files) in walk:
-            file_dirs  = [root+ f"/{f}" for f in files if (f.endswith('.joblib') or f.endswith('.toml'))]
-            data_paths+= file_dirs
-        def extension_key(data):
-            if data.endswith('.joblib'):
-                return 0
-            elif data.endswith('.toml'):
-                return 1
-        most_recent_data = sorted(data_paths, key=os.path.getmtime, reverse = True) # Sort all files according to their timestamp 
-        extension_sorted_files = sorted(most_recent_data[0:2], key=extension_key)  # Sort files according to their extension (.joblib first then .toml)
-        joblib_file, toml_file = extension_sorted_files[0], extension_sorted_files[1]
-        logger.info(f"Most recent .joblib file found: {joblib_file}")
-        logger.info(f"Most recent .toml file found: {toml_file}")
+        try:
+            print("in get latest raman files")
+            folders_dir = self.main_oras_dir + 'data'
+            logger.info(f"Looking into following folder for Raman data: {folders_dir}")
+            walk = os.walk(folders_dir) #top down walk of directory content in tuples of (root,dirs,files)
+            data_paths = []
+            print("walk:", walk)
+            for (root,dirs,files) in walk:
+                print("before file dirs:")
+                print(root, dirs, files)
+                file_dirs  = [root+ f"/{f}" for f in files if (f.endswith('.joblib') or f.endswith('.toml'))]
+                print("file_dirs:", file_dirs)
+                data_paths+= file_dirs
+            def extension_key(data):
+                if data.endswith('.joblib'):
+                    return 0
+                elif data.endswith('.toml'):
+                    return 1
+            most_recent_data = sorted(data_paths, key=os.path.getmtime, reverse = True) # Sort all files according to their timestamp 
+            extension_sorted_files = sorted(most_recent_data[0:2], key=extension_key)  # Sort files according to their extension (.joblib first then .toml)
+            joblib_file, toml_file = extension_sorted_files[0], extension_sorted_files[1]
+            logger.info(f"Most recent .joblib file found: {joblib_file}")
+            logger.info(f"Most recent .toml file found: {toml_file}")
+        except Exception as e:
+            logger.error(f"error while getting latest generated file: {e}")
         return joblib_file, toml_file
     
     def get_latest_raman_data(self):
         # Function to get raman data in file saved by oras.
+        print("before get latest raman files")
         joblib_file, toml_file = self.get_latest_raman_files()
-        data_file = joblib.load(joblib_file)
-        toml_dict = tomli.load(toml_file)
+        print("after get latest raman files:",joblib_file, toml_file )
+        with open(joblib_file, 'rb') as joblib_f, open(toml_file, 'rb') as toml_f:
+            data_file = joblib.load(joblib_f)
+            toml_dict = tomli.load(toml_f)
+        print("after loading raman files content")
         raman_xaxis= data_file['xaxis']
         raman_bkg = data_file['background']
         raman_accumulations= data_file['accumulations']
@@ -820,10 +833,10 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             worker = WorkerThread(self.button_DRS_acquisition)
             worker.signals.result.connect(lambda t: self.update_acq_combobox(*t))
             self.threadpool.start(worker)
-            self.is_measuring = False
-            self.pushButtonMeasureDRS.setText("DRS")
         except Exception as e:
             logger.error(e, exc_info=True)
+        self.pushButtonMeasureDRS.setText("DRS")
+        self.is_measuring = False
         self.update_ui()
         
     def button_DRS_acquisition(self):
@@ -860,19 +873,20 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             acq_name = self.get_acquisition_name()
             acq_comment = self.get_acquisition_comment()
             self.raman_acquisition(acq_name, acq_comment)
+            print("after raman acquisition")
             raman_xaxis, raman_bkg, raman_accumulations, raman_exposure = self.get_latest_raman_data()
+            print("after getting raman data")
             saved_data = self.save_acquisition(self.save_dir, acq_name, acq_comment,
                                             raman_background = raman_bkg,  xaxis_raman = raman_xaxis, 
                                             raman_data = raman_accumulations, raman_exposure=raman_exposure)
             self.update_acq_combobox(acq_name, saved_data)
-            self.is_measuring = False
+            
             logger.info(f"Raman acquisition done")
         except Exception as e:
             logger.error(f"Error during Raman acquisition: {e}")
-        finally:    
-            self.pushButtonMeasureRaman.setEnabled(True)
-            self.pushButtonMeasureRaman.setText("Raman")
-            self.update_ui()
+        self.is_measuring = False
+        self.pushButtonMeasureRaman.setText("Raman")
+        self.update_ui()
 
     def button_raman_DRS_acquisition(self):
         """
@@ -998,6 +1012,8 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             print("after loop worker:", self.oras_loop_worker)
             self.threadpool.start(self.oras_loop_worker)
             self.oras_loop_worker.signals.result.connect(self.set_oras_status)
+            self.oras_loop_worker.signals.result.connect(self.construct_raman_profile_combobox)
+            
         except Exception as e:
             print("error happened")
             logger.error(e, exc_info=True)

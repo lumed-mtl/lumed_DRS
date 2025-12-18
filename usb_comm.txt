@@ -1,0 +1,5 @@
+https://www.google.com/search?q=pyvisa+not+detecting+usb+rs232+on+linux&client=firefox-b-lm&hs=o8zo&sca_esv=4c83e8cc851d4e9c&ei=jUREaeSgJ9jw0PEP--3R4QY&ved=2ahUKEwjPgbj_3seRAxWxpIkEHV51NsUQ0NsOegQIAxAB&uact=5&sclient=gws-wiz-serp&udm=50&fbs=AIIjpHxU7SXXniUZfeShr2fp4giZud1z6kQpMfoEdCJxnpm_3YlUqOpj4OTU_HmqxOd8LCZrcXHqYNp1-qfF_BklzYan1BHWB4Mk7BDQDhzdAXnOI1x41MxadX8MO8RC08WimhyUiMryc4uFYyYxR4c_MaiVcsF0aM-b-mfHwMsbkuLBEXCt9Y1zFcLgjuOuEFPqfYrjdhw2AUHkx44oL1tkVGOqDY0IEw&aep=10&ntc=1&mstk=AUtExfBvX9ITWXhtfNAN00m3fRR12zoK-pw2mvsOTdFxkD4uaXgbA2gMR9cgB5N6eWCqx6h6yozopJZZdBfZ4PUi8rvN9CeDuF-hUUDUagZVkH9bzznFbWAUoUnBPZ6ND9e_tGmxTjGX7Z8h5I1CnsfxsMjYwbj7m7tu0Ik&csuir=1
+
+KERNEL=="ttyUSB*", MODE="0666", GROUP="dialout"
+
+SUBSYSTEM=="usb", ATTR{idVendor}=="067b", ATTR{idProduct}=="2303", MODE="0660", GROUP="dialout"

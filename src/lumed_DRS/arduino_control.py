@@ -4,7 +4,6 @@ from pyvisa.constants import BufferType
 import time as tt
 import matplotlib.pyplot as plt
 from threading import Lock
-import serial
 import time as tt
 #import logger
 class Arduino:
@@ -27,9 +26,8 @@ class Arduino:
             Mapping of resource name to ResourceInfo from pyvisa.
         """
         try:
-            available_resources = self.resource_manage.list_resources()
-            available_resources_info = self.resource_manage.list_resources_info(query="?*ASR?*") #
-            # print("available resources",resources)
+            available_resources = self.resource_manage.list_resources(query='?*::INSTR')
+            print("available resources",available_resources)
             ports = list_ports.comports()
             # for i, port in enumerate(ports):
             #     comport_string = str(port)
@@ -45,13 +43,14 @@ class Arduino:
                     self.pyvisa_serial.baud_rate = 9600
                     self.pyvisa_serial.write_termination = "\n"
                     self.pyvisa_serial.read_termination = "\n"
-                    self.pyvisa_serial.timeout = 500 # ms
-                    print("opening time:", tt.time() - tic)
-                    tt.sleep(0.5)
+                    self.pyvisa_serial.timeout = 1000 # ms                    
+                    tt.sleep(2)
+                    #self.pyvisa_serial.clear()
                     # current_device.timeout = 500
                     print("current resource:", resource, "current device:", self.pyvisa_serial)
-                    query = self._safe_scpi_query("*idn?")
-                    print('query logic:', query == "DRS_arduino\n" )
+                    query = self.pyvisa_serial.query('*idn?', delay=0.1).strip()
+                    #query = self._safe_scpi_query('*idn?')
+                    print('query:', query )
                     if 'DRS_arduino' in query:
                         self.pyvisa_serial.close()
                         return resource
@@ -126,6 +125,7 @@ class Arduino:
                 print("after write")
                 tt.sleep(0.1) #wait for process to occur
                 reading = self.pyvisa_serial.read_raw().decode()
+                print("Query reading:", reading)
                 print("after read")
                 return reading  
             except Exception as e:
