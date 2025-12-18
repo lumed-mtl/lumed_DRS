@@ -9,7 +9,8 @@ import time as tt
 #import logger
 class Arduino:
     def __init__(self) -> None:
-        self.comport: str | None = None #communication port on which the lamp is connected via usb
+        self.comport: str | None = None #communication port on which the arduino is connected via usb
+        self.arduino_DRS_resource : str | None = None #communication resource on which the arduino is connected via usb
         self.pyvisa_serial: pyvisa.resources.serial.SerialInstrument | None = None
         self.isconnected: bool = False
         self._mutex: Lock = Lock()
@@ -26,44 +27,72 @@ class Arduino:
             Mapping of resource name to ResourceInfo from pyvisa.
         """
         try:
-            resources = self.resource_manage.list_resources()
-            # available_ports = self.resource_manage.list_resources_info(query="?*ASR?*") #
-            # print("available_ports:",available_ports)
+            available_resources = self.resource_manage.list_resources()
+            available_resources_info = self.resource_manage.list_resources_info(query="?*ASR?*") #
+            # print("available resources",resources)
             ports = list_ports.comports()
-            for i, port in enumerate(ports):
-                comport_string = str(port)
-                if 'arduino' in comport_string.lower():  
-                    print('here')
-                    self.comport = resources[i] #comport_string[0: comport_string.find("-")].strip()
-                    print('arduino comport:', resources[i])
-                    return self.comport 
-            return None
+            # for i, port in enumerate(ports):
+            #     comport_string = str(port)
+            #     if 'arduino' in comport_string.lower():  
+            #         print('here')
+            #         self.comport = resources[i] #comport_string[0: comport_string.find("-")].strip()
+            #         print('arduino comport:', resources[i])
+            #         return self.comport 
+            for resource in available_resources:
+                try:
+                    tic = tt.time()
+                    self.pyvisa_serial = self.resource_manage.open_resource(resource)
+                    self.pyvisa_serial.baud_rate = 9600
+                    self.pyvisa_serial.write_termination = "\n"
+                    self.pyvisa_serial.read_termination = "\n"
+                    self.pyvisa_serial.timeout = 500 # ms
+                    print("opening time:", tt.time() - tic)
+                    tt.sleep(0.5)
+                    # current_device.timeout = 500
+                    print("current resource:", resource, "current device:", self.pyvisa_serial)
+                    query = self._safe_scpi_query("*idn?")
+                    print('query logic:', query == "DRS_arduino\n" )
+                    if 'DRS_arduino' in query:
+                        self.pyvisa_serial.close()
+                        return resource
+                    else:
+                        tic = tt.time()
+                        self.pyvisa_serial.close()
+                        print("closing time:", tt.time() - tic)
+                except Exception as e:
+                    print("Error:", e)
+                    tic = tt.time()
+                    self.pyvisa_serial.close()
+                    print("closing time:", tt.time() - tic)
+                    continue
         except Exception as e:
+            print("Error:", e)
             return None
     def connect(self):
         try:
-            self.pyvisa_serial = self.resource_manage.open_resource(self.comport)
+            self.arduino_DRS_resource = self.find_arduino_device()
+            self.pyvisa_serial = self.resource_manage.open_resource(self.arduino_DRS_resource)
             self.isconnected = True
             self.pyvisa_serial.write_termination = "\n"
             self.pyvisa_serial.read_termination = "\n"
             self.pyvisa_serial.encoding = "utf-8"
-            self.pyvisa_serial.baud_rate = 9600 
+            self.pyvisa_serial.baud_rate = 9600 # 115200 # baud rate 
             self.pyvisa_serial.timeout = 1000 #ms
             tt.sleep(1) # Give time to establish the serial connection
-            print(f"Connected to arduino on port: {self.comport}")
+            print(f"Connected to arduino on port: {self.arduino_DRS_resource}")
         except:
-            print("Not able to connect to arduino")   
+            print("Warning: could not connect to arduino")   
     def disconnect(self):
         try:
             self.pyvisa_serial.close()
-            print(f"Disconnected arduino on port: {self.comport}")
+            print(f"Disconnected arduino on port: {self.arduino_DRS_resource}")
         except:
             print("Not able to disconnect arduino")         
 
     def _safe_scpi_write(self, message: str) -> (int):
-        """Sends a serial message to the lamp and verifies if any communication error occured.
+        """Sends a serial message to the arduino board and verifies if any communication error occured.
 
-        Parameter : <message> (string) : Message send to the lamp by serial.
+        Parameter : <message> (string) : Message send to the arduino by serial.
         The command syntax for those messages is explained in the documentation provided by IPS.  %
 
         Returns:
@@ -83,28 +112,31 @@ class Arduino:
 
         return None #err_code, err_msg
     def _safe_scpi_query(self, message: str) -> (str):
-        """Sends a serial message to the lamp
+        """Sends a serial message to the arduino
 
-        Parameter : <message> (string) : Message send to the lamp by serial.
+        Parameter : <message> (string) : Message send to the arduino by serial.
 
         Returns:
-        <value> (string) : Answer provided by the lamp to the serial COM.
+        <value> (string) : Answer provided by the arduino to the serial COM.
         """
         with self._mutex:
-            time0 = tt.time()
             try:
-                readings = []
+                print("before write")
                 self.pyvisa_serial.write(message)
+                print("after write")
                 tt.sleep(0.1) #wait for process to occur
                 reading = self.pyvisa_serial.read_raw().decode()
+                print("after read")
                 return reading  
             except Exception as e:
                 print(e)
     def generate_pulse(self):
         try:
+            # pin_state = self._safe_scpi_query("ON")
+            # print(f"ttl pin state:", pin_state)
             self._safe_scpi_write("ON")
-        except:
-            None
+        except Exception as e:
+            print("Generate pulse error:", e)
     def stop_pulse(self):
         try:
             self._safe_scpi_write("OFF")
@@ -119,28 +151,28 @@ class Arduino:
                 None
 
 if __name__ == "__main__":
-    arduino = Arduino()
-    arduino.find_arduino_device()
-    arduino.connect()
-    arduino.generate_pulse() 
-    #arduino._safe_scpi_write("ON")
-    #print("query:", arduino._safe_scpi_query("*idn?"))
+    print("Arduino class here")
+    # arduino = Arduino()
+    # arduino.find_arduino_device()
+    # arduino.connect()
+    # arduino.generate_pulse() 
+    # #arduino._safe_scpi_write("ON")
+    # #print("query:", arduino._safe_scpi_query("*idn?"))
 
-    toc = tt.time()
-    readings = []
-    counter = 0
-    while tt.time()- toc < 2:
-        if counter < 10:
-            print("counter: ", counter)
-            #arduino._safe_scpi_write("ON") 
-        reading = arduino._safe_scpi_read()
-        print("time (s):", round(tt.time()- toc, 3), "reading:", reading)
-        readings.append(reading)
-        counter += 1
-    # plt.figure()
-    # plt.plot(readings)
-    #plt.show()
-    arduino.disconnect()
+    # toc = tt.time()
+    # readings = []
+    # counter = 0
+    # while tt.time()- toc < 10:
+    #     print("counter: ", counter)
+    #     #arduino._safe_scpi_write("ON") 
+    #     reading = arduino._safe_scpi_read()
+    #     print("time (s):", round(tt.time()- toc, 3), "reading:", reading)
+    #     readings.append(reading)
+    #     counter += 1
+    # # plt.figure()
+    # # plt.plot(readings)
+    # #plt.show()
+    # arduino.disconnect()
     
     #print(arduino.comport)
 

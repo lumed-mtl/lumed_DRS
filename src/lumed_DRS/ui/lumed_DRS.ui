@@ -33,7 +33,7 @@
     <rect>
      <x>30</x>
      <y>20</y>
-     <width>571</width>
+     <width>541</width>
      <height>131</height>
     </rect>
    </property>
@@ -402,7 +402,7 @@
    <property name="geometry">
     <rect>
      <x>30</x>
-     <y>230</y>
+     <y>250</y>
      <width>361</width>
      <height>122</height>
     </rect>
@@ -596,14 +596,14 @@
     <rect>
      <x>30</x>
      <y>160</y>
-     <width>571</width>
-     <height>58</height>
+     <width>261</width>
+     <height>89</height>
     </rect>
    </property>
    <property name="title">
     <string>Profile selection</string>
    </property>
-   <layout class="QHBoxLayout" name="horizontalLayout_10">
+   <layout class="QVBoxLayout" name="verticalLayout_11">
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_5">
       <item>
@@ -667,7 +667,7 @@
         </property>
         <property name="minimumSize">
          <size>
-          <width>80</width>
+          <width>101</width>
           <height>23</height>
          </size>
         </property>
@@ -706,7 +706,7 @@
    <property name="geometry">
     <rect>
      <x>30</x>
-     <y>480</y>
+     <y>500</y>
      <width>202</width>
      <height>50</height>
     </rect>
@@ -761,7 +761,7 @@
    <property name="geometry">
     <rect>
      <x>30</x>
-     <y>360</y>
+     <y>380</y>
      <width>351</width>
      <height>91</height>
     </rect>
@@ -876,7 +876,7 @@
    <property name="geometry">
     <rect>
      <x>30</x>
-     <y>540</y>
+     <y>560</y>
      <width>341</width>
      <height>171</height>
     </rect>
@@ -1219,7 +1219,7 @@
    <property name="geometry">
     <rect>
      <x>30</x>
-     <y>710</y>
+     <y>730</y>
      <width>429</width>
      <height>106</height>
     </rect>
@@ -1345,7 +1345,7 @@ color:green;</string>
    <property name="geometry">
     <rect>
      <x>240</x>
-     <y>480</y>
+     <y>500</y>
      <width>104</width>
      <height>54</height>
     </rect>
@@ -1395,17 +1395,17 @@ accumulations:</string>
   <widget class="QTabWidget" name="tabWidgetPlotDisplay">
    <property name="geometry">
     <rect>
-     <x>630</x>
+     <x>580</x>
      <y>10</y>
-     <width>681</width>
-     <height>511</height>
+     <width>731</width>
+     <height>541</height>
     </rect>
    </property>
    <property name="styleSheet">
     <string notr="true"/>
    </property>
    <property name="currentIndex">
-    <number>0</number>
+    <number>1</number>
    </property>
    <property name="documentMode">
     <bool>false</bool>
@@ -1421,69 +1421,198 @@ accumulations:</string>
     </attribute>
    </widget>
   </widget>
-  <widget class="QGroupBox" name="groupBoxSpectralonNormalization">
+  <widget class="QGroupBox" name="groupBox_4">
    <property name="geometry">
     <rect>
-     <x>1090</x>
-     <y>650</y>
-     <width>151</width>
-     <height>90</height>
+     <x>980</x>
+     <y>560</y>
+     <width>324</width>
+     <height>123</height>
     </rect>
    </property>
    <property name="title">
-    <string>Spectralon Normalisation</string>
+    <string>DRS Display Settings</string>
    </property>
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <layout class="QVBoxLayout" name="verticalLayout_9">
+   <layout class="QHBoxLayout" name="horizontalLayout_10">
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_19">
-      <item>
-       <spacer name="horizontalSpacer_5">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item>
-       <widget class="QRadioButton" name="radioButtonSelectedSpectralon">
-        <property name="text">
-         <string>Selected</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
+     <widget class="QGroupBox" name="groupBox_3">
+      <property name="title">
+       <string>DRS x axis</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_15">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_20">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="label_8">
+           <property name="minimumSize">
+            <size>
+             <width>80</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>80</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>min x lim (nm):</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="lineEditMinXLim">
+           <property name="minimumSize">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>400</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_21">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="label_9">
+           <property name="minimumSize">
+            <size>
+             <width>80</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>80</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>max x lim (nm):</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="lineEditMaxXLim">
+           <property name="minimumSize">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+           <property name="accessibleDescription">
+            <string/>
+           </property>
+           <property name="text">
+            <string>1050</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
     </item>
     <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_12">
-      <item>
-       <spacer name="horizontalSpacer_4">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>28</width>
-          <height>27</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item>
-       <widget class="QRadioButton" name="radioButtonNativeSpectralon">
-        <property name="text">
-         <string>Native   </string>
-        </property>
-       </widget>
-      </item>
-     </layout>
+     <widget class="QGroupBox" name="groupBoxSpectralonNormalization">
+      <property name="title">
+       <string>Spectralon Normalisation</string>
+      </property>
+      <property name="checkable">
+       <bool>true</bool>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_9">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_19">
+         <item>
+          <spacer name="horizontalSpacer_5">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="radioButtonSelectedSpectralon">
+           <property name="text">
+            <string>Selected</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_12">
+         <item>
+          <spacer name="horizontalSpacer_4">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>28</width>
+             <height>27</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="radioButtonNativeSpectralon">
+           <property name="text">
+            <string>Native   </string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
     </item>
    </layout>
   </widget>

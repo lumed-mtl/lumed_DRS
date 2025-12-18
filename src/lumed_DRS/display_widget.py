@@ -45,23 +45,42 @@ class DataDisplayWidget(QWidget):
         if labels is not None:
             self.ax.legend(labels)
     
-    def update_plot(self, xdata, ydata, labels:list = None):
+    def autoset_ylim(self, ax): # after ax.set_xlim((xstart,xend))
+        xlim = ax.get_xlim()
+        ymin = None 
+        ymax = None
+        for line in ax.lines:
+            x=line.get_xdata()
+            y=line.get_ydata()
+            i = np.where( (x > xlim[0]) &  (x < xlim[1]) )[0]
+            if ymin == None:
+                ymin = y[i].min()
+                ymax = y[i].max()
+            else:
+                ymin = min(ymin,y[i].min())
+                ymax = max(ymax,y[i].max())
+        ax.set_ylim((ymin*0.9,ymax*1.1)) # Have a free 10% above and under the y lims
+        return ymin,ymax
+
+    def update_plot(self, xdata, ydata, labels:list = None, x_lims = None):
         colors = plt.cm.jet(np.linspace(0,1,ydata.shape[1])) # color gradient definition
         if self._plot_ref is None: 
             self._plot_ref = []
             for i in range(ydata.shape[1]):
-                self._plot_ref.append(self.ax.plot(xdata, ydata[:,i], color=colors[i], labels = labels[i])) # if first time plotting call plot method
+                #if first time plotting call plot method
+                self._plot_ref.append(self.ax.plot(xdata, ydata[:,i], color=colors[i], labels = labels[i])) 
         elif len(self.ax.lines) >= ydata.shape[1]:
             #if number of lines is higher or equal than the newer data we want to plot
             N = ydata.shape[1]# Number of new line plots
-            #print('len(self._plot_ref):', len(self._plot_ref), 'ydata.shape[1]:', ydata.shape[1])
             #Trim lines that are in excess
             for line in self.ax.lines[N:]:
                 line.remove()
             # Set data in lines that remain with the new data
             for i in range(len(self.ax.lines)):
                 print('i:', i, "label:", labels[i])
-                self.ax.lines[i].set_ydata(ydata[:,i]) #update y data of plot instead of clearing the axes (faster)
+                #update x and y data of plot instead of clearing the axes (faster)
+                self.ax.lines[i].set_ydata(ydata[:,i]) 
+                self.ax.lines[i].set_xdata(xdata) 
                 self.ax.lines[i].set_color(colors[i])
                 if labels is not None:
                     self.ax.lines[i].set_label(labels[i]) 
@@ -77,11 +96,19 @@ class DataDisplayWidget(QWidget):
                 else:
                     #update y data of plot instead of clearing the axes (faster)
                     self.ax.lines[i].set_ydata(ydata[:,i]) 
+                    self.ax.lines[i].set_xdata(xdata)
                     self.ax.lines[i].set_color(colors[i])
                     if labels is not None:
                         self.ax.lines[i].set_label(labels[i])
         if labels is not None:
             self.ax.legend() # Tell matplotlib to refresh the legend
-        self.ax.relim() # Recompute the data limits based on current artists (from documentation)
-        self.ax.autoscale()
+        if x_lims is not None:
+            # Set the xlim and ylim to the one set by user 
+            
+            self.ax.set_xlim(x_lims) 
+            ylims = self.autoset_ylim(self.ax)
+            print("x_lims, ylims:", x_lims, ylims)
+        else:
+            self.ax.relim() # Recompute the data limits based on current artists sif no x and y limits have been given
+        #self.ax.autoscale()
         self.canvas.draw()

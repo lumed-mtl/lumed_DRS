@@ -69,16 +69,20 @@ class MayaSpectrometer:
         Connect to requested spectrometer
         """
         try:
+            # For some reason the trigger mode has to be first set to its default value (0) 
+            # then take a dummy acquisition and set the wanted trigger mode of 3 
+            # for it to properly work in the trigger mode 3 ¯\_(ツ)_/¯
             self.spectro = Spectrometer(self.device)
             #connect arduino
             self.arduino = Arduino()
-            self.arduino.find_arduino_device()
             self.arduino.connect()
+            self.spectro.trigger_mode(0) # Set the to trigger mode 0 even though its already at this trigger mode by default ¯\_(ツ)_/¯
             if self.arduino.isconnected: # arduino device exists
+                wavelenghts, counts = self.spectrum_acquisition(8) # dummy acquisition so that spectrometer can properly change its trigger mode ¯\_(ツ)_/¯
                 self.trigger_mode = 3 #set the trigger mode to external hardware if arduino is connected
             self.isconnected = True
             self.spectro.trigger_mode(self.trigger_mode) #set the trigger mode of intensity acquisition
-            print(f"Connected to spectrometer: {self.spectro}")
+            print(f"Connected to spectrometer: {self.spectro} with trigger mode set to {self.trigger_mode}")
         except Exception as e:
             pass
 
@@ -96,15 +100,22 @@ class MayaSpectrometer:
         # Set exposure time
         self.spectro.integration_time_micros(
             exposure_time * 1000)  # *1000 because the exposure time is given in microseconds to the function
+        print("acquisition with trigger mode:", self.trigger_mode)
         if self.trigger_mode == 3:
             spectrum_thread = CustomThread(target=self.spectro.spectrum)
+            print(f"INITIALIZED THREAD:")
             spectrum_thread.start()
+            print(f"STARTED THREAD:")
             #send trigger pulse with a delay
-            self.arduino.generate_pulse()     
+            self.arduino.generate_pulse()
+            print(f"Generated pulse")     
             wavelengths, counts = spectrum_thread.join()
+            print(f"Joined thread")    
         else:
             # Get wavelengths and intensities
+            print(f"running spectrum in else condition")  
             wavelengths, counts = self.spectro.spectrum() 
+            self.spectro.features
         return wavelengths, counts
 
     def disconnect(self):
