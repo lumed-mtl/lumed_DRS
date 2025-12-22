@@ -66,8 +66,6 @@ class WorkerThread(QRunnable):
             traceback.print_exc()
             exctype, value = sys.exc_info()[:2]
             self.signals.error.emit((exctype, value, traceback.format_exc()))
-        else:
-            self.signals.result.emit(result)
         finally:
             self.signals.finished.emit()
 
@@ -83,7 +81,6 @@ class LoopWorkerThread(QRunnable):
         self.signals = WorkerSignals()
         self.interval = float(interval)
         self._stop_event = threading.Event()
-    
     def stop(self):
         """Request the loop to stop from another thread (main thread)."""
         self._stop_event.set()

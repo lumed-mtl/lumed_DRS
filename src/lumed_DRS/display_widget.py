@@ -68,7 +68,10 @@ class DataDisplayWidget(QWidget):
             self._plot_ref = []
             for i in range(ydata.shape[1]):
                 #if first time plotting call plot method
-                self._plot_ref.append(self.ax.plot(xdata, ydata[:,i], color=colors[i], labels = labels[i])) 
+                if labels is not None:
+                    self._plot_ref.append(self.ax.plot(xdata, ydata[:,i], color=colors[i], label = labels[i])) 
+                else:
+                    self._plot_ref.append(self.ax.plot(xdata, ydata[:,i], color=colors[i])) 
         elif len(self.ax.lines) >= ydata.shape[1]:
             #if number of lines is higher or equal than the newer data we want to plot
             N = ydata.shape[1]# Number of new line plots
@@ -76,17 +79,18 @@ class DataDisplayWidget(QWidget):
             for line in self.ax.lines[N:]:
                 line.remove()
             # Set data in lines that remain with the new data
-            for i in range(len(self.ax.lines)):
+            for i,line in enumerate(self.ax.lines):
                 #print('i:', i, "label:", labels[i])
                 #update x and y data of plot instead of clearing the axes (faster)
-                self.ax.lines[i].set_ydata(ydata[:,i]) 
-                self.ax.lines[i].set_xdata(xdata) 
-                self.ax.lines[i].set_color(colors[i])
+                line.set_ydata(ydata[:,i])
+                line.set_xdata(xdata)
+                line.set_color(colors[i])
                 if labels is not None:
-                    self.ax.lines[i].set_label(labels[i]) 
+                    line.set_label(labels[i])
 
         elif len(self.ax.lines) < ydata.shape[1]:
             #if number of lines is lower than the newer data we want to plot
+            print('ydata.shape:', ydata.shape)
             for i in range(ydata.shape[1]):
                 if i >= len(self.ax.lines):
                     # plot new lines for indexes that exceed the previous plot
@@ -104,11 +108,12 @@ class DataDisplayWidget(QWidget):
             self.ax.legend() # Tell matplotlib to refresh the legend
         if x_lims is not None:
             # Set the xlim and ylim to the one set by user 
-            
             self.ax.set_xlim(x_lims) 
             ylims = self.autoset_ylim(self.ax)
             print("x_lims, ylims:", x_lims, ylims)
         else:
-            self.ax.relim() # Recompute the data limits based on current artists sif no x and y limits have been given
-        #self.ax.autoscale()
+            print("automatically calculating x and y lims")
+            self.ax.relim() # Recompute the data limits based on current artists if no x and y limits have been given
+            self.ax.autoscale()
+
         self.canvas.draw()
