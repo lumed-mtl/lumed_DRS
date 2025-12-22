@@ -111,7 +111,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.acqnames_list: list = []
         self.comments_list: list = []
         self.saved_data_list: list = []
-        self.main_oras_dir: str = "/home/lumed/oras/" #"C:/Users/nerfi/oras/" # 
+        self.main_oras_dir: str = "C:/Users/nerfi/oras/" # "/home/lumed/oras/" #
         #Setup display
         self.display_raman = DataDisplayWidget()
         self.verticalLayout_raman = QtWidgets.QVBoxLayout()
