@@ -77,7 +77,7 @@ class DataDisplayWidget(QWidget):
                 line.remove()
             # Set data in lines that remain with the new data
             for i in range(len(self.ax.lines)):
-                print('i:', i, "label:", labels[i])
+                #print('i:', i, "label:", labels[i])
                 #update x and y data of plot instead of clearing the axes (faster)
                 self.ax.lines[i].set_ydata(ydata[:,i]) 
                 self.ax.lines[i].set_xdata(xdata) 
