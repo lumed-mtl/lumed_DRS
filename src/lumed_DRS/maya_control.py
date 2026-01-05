@@ -78,7 +78,7 @@ class MayaSpectrometer:
             self.arduino.connect()
             self.spectro.trigger_mode(0) # Set the to trigger mode 0 even though its already at this trigger mode by default ¯\_(ツ)_/¯
             if self.arduino.isconnected: # arduino device exists
-                wavelenghts, counts = self.spectrum_acquisition(8) # dummy acquisition so that spectrometer can properly change its trigger mode ¯\_(ツ)_/¯
+                wavelenghts, counts = self.spectrum_acquisition(8) # dummy acquisition of 8 ms so that spectrometer can properly change its trigger mode ¯\_(ツ)_/¯
                 self.trigger_mode = 3 #set the trigger mode to external hardware if arduino is connected
             self.isconnected = True
             self.spectro.trigger_mode(self.trigger_mode) #set the trigger mode of intensity acquisition

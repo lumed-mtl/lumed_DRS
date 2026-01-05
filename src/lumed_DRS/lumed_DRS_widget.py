@@ -74,6 +74,11 @@ def configure_logger():
 
     logger.addHandler(terminal_handler)
     logger.addHandler(file_handler)
+    # Reduce noisy output from pyvisa/pyserial internals
+    logging.getLogger("pyvisa").setLevel(logging.WARNING)
+    logging.getLogger("pyvisa.messagebased").setLevel(logging.WARNING)
+    logging.getLogger("pyvisa-py").setLevel(logging.WARNING)
+    logging.getLogger("serial").setLevel(logging.WARNING)
     #logger.setLevel(logging.DEBUG)
     # Prevent messages from being propagated to the root logger (and printed again)
     logger.propagate = False
@@ -118,11 +123,13 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.verticalLayout_raman.addWidget(self.display_raman.canvas)
         self.verticalLayout_raman.addWidget(self.display_raman.toolbar)
         self.RamanTab.setLayout(self.verticalLayout_raman)
+        self.display_raman.set_axis_labels("Raman shift (cm$^{-1}$)", "a.u.")
         self.display_DRS = DataDisplayWidget()
         self.verticalLayout_DRS = QtWidgets.QVBoxLayout()
         self.verticalLayout_DRS.addWidget(self.display_DRS.canvas)
         self.verticalLayout_DRS.addWidget(self.display_DRS.toolbar)
         self.DRSTab.setLayout(self.verticalLayout_DRS)
+        self.display_DRS.set_axis_labels("wavelength (nm)", "count")
         #Thread management
         self.threadpool = QThreadPool()
         logger.info(f"Widget initialization complete. Multithreading with max {self.threadpool.maxThreadCount()} threads.")
@@ -157,7 +164,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.toolButtonSaveDir.clicked.connect(self.select_save_folder_dir)
         self.pushButtonMeasureDRS.clicked.connect(self.button_DRS_acquisition_worker)
         self.pushButtonMeasureRaman.clicked.connect(self.button_raman_acquisition_worker)
-        self.pushButtonMeasureRamanDRS.clicked.connect(self.display_test_data) # originaly self.button_raman_DRS_acquisition
+        self.pushButtonMeasureRamanDRS.clicked.connect(self.button_raman_DRS_acquisition_worker) # originaly self.button_raman_DRS_acquisition
         self.checkBoxSave.stateChanged.connect(self.update_ui)
         self.radioButtonSelectedSpectralon.toggled.connect(self.display_saved_data)
         self.radioButtonNativeSpectralon.toggled.connect(self.display_saved_data)
@@ -349,7 +356,6 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             print('self.xaxis_files: ', self.xaxis_file, 'type: ', type(self.xaxis_file))
             with open(self.xaxis_file, 'rb') as f:
                 self.xaxis_data = joblib.load(f)
-                print('data_file:', self.xaxis_data)
                 url = QUrl.fromLocalFile(self.xaxis_file)
             print('url: ', url ) 
             self.lineEditXaxisFile.setText(url.fileName()) # Display the selected xaxis file
@@ -377,33 +383,37 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             if type(self.xaxis_file) is str and (len(self.xaxis_file) == 0): # If True, file selection was canceled
                 logger.info("Canceled: No Raman xaxis file was selected")
             logger.error(e, exc_info=True)
+        finally:
+            self.update_ui()
             
     def select_yaxis(self):
         try:
             if self.xaxis_raman is None:
-                logger.info("Canceled: No Raman xaxis file was selected before selecting yaxis file. Exception error will be raised")
-                raise Exception("No xaxis file selected. Select a xaxis file first")
-            self.yaxis_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a file to set yaxis", filter=("Text files (*.joblib)"))[0]
+                logger.info("Canceled: No Raman x axis file was selected before selecting y axis file")
+                raise Exception("No yaxis file selected. Select a yaxis file first")
+            self.yaxis_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a file to set y axis", filter=("Text files (*.joblib)"))[0]
             print('self.yaxis_files: ', self.yaxis_file, 'type: ', type(self.yaxis_file))
             with open(self.yaxis_file, 'rb') as f:
                 self.yaxis_data = joblib.load(f)
-                print('data_file:', self.yaxis_data)
             url = QUrl.fromLocalFile(self.yaxis_file)
             print('url: ', url )
             self.lineEditYaxisFile.setText(url.fileName()) # Display the selected yaxis file name
-            logger.info("Selected yaxis file: %s", url.fileName())
-            raw_spectrum = self.yaxis_data['accumulations'] #'raman_data'
-            print("raw_spectrum shape:", raw_spectrum.shape)
+            logger.info("Selected y axis file: %s", url.fileName())
+            raw_irf_spectrum = self.yaxis_data['accumulations'] #'raman_data'
+            print("raw_spectrum shape:", raw_irf_spectrum.shape)
             bkg = self.yaxis_data['background']  #'raman_background'
             print("bkg shape:", bkg.shape)
-            raw_mean = np.mean(raw_spectrum - bkg, axis=0) 
+            raw_mean = np.mean(raw_irf_spectrum - bkg, axis=0) 
             self.irf_raman = la.get_correction_curve(self.xaxis_raman, raw_mean) # get instrument response function (IRF) from xaxis (cm-1) and measured nist (raw_mean)
-            self.display_DRS.update_plot(self.xaxis_raman, self.irf_raman.reshape(self.irf_raman.shape[0],1), labels = ["IRF"])
+            self.irf_raman = self.irf_raman.reshape(self.irf_raman.shape[0],1)
+            self.display_DRS.update_plot(self.xaxis_raman, self.irf_raman, labels = ["IRF"])
             return self.irf_raman
         except Exception as e: 
             if type(self.yaxis_file) is str and (len(self.yaxis_file) == 0): # If True, file selection was canceled
-                logger.info("Canceled: No Raman yaxis file was selected")
+                logger.info("Canceled: No Raman y axis file was selected")
             logger.error(e, exc_info=True)
+        finally:
+            self.update_ui()
 
     def select_spectralon(self):
         try:
@@ -450,7 +460,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
 
     def save_acquisition(self, directory, acq_name, acq_comment, 
                          DRS_background = None, xaxis_DRS = None, DRS_data = None, DRS_spectralon = None,
-                         DRS_exposure = None, raman_background = None,  xaxis_raman = None, raman_data = None, raman_exposure = None):
+                         DRS_exposure = None, raman_background = None,  xaxis_raman = None, raman_accumulations = None, raman_exposure = None):
         """
         Structures data into a dictionnary and saved into .joblib file.
         inputs
@@ -468,7 +478,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         saved_data['drs_exposure'] = DRS_exposure
         saved_data['raman_background'] = raman_background
         saved_data['xaxis_raman'] = xaxis_raman
-        saved_data['raman_data'] = raman_data
+        saved_data['raman_accumulations'] = raman_accumulations
         saved_data['raman_exposure'] = raman_exposure
         saved_data['yaxis_raman'] = self.irf_raman
         self.saved_data_list.append(saved_data) #add newer data to list of saved data to be displayed on ui
@@ -484,21 +494,22 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         return saved_data
 
     def update_acq_combobox(self, acq_name: str, current_data: dict) -> None:
-        print("in update acq combobox")
         self.comboBoxAcqName.insertItem(0, acq_name, current_data)
         self.comboBoxAcqName.setCurrentIndex(0)
-        print("finished acq combobox")
-        #self.textEditComment.setPlainText(self.comboBoxAcqName.currentData()["comment"])
 
     def display_saved_data(self):
         try:
             current_data = self.comboBoxAcqName.currentData()
             self.textEditComment.setPlainText(current_data["comment"]) #access the data linked to the combobox item
+            print("------------DISPLAYING DATA-----------")
+            print("current data:", current_data)
+            print("DRS:", current_data["drs_data"])
+            print("RAMAN:", current_data["raman_accumulations"])
             if current_data["drs_data"] is not None: #if current_data["drs_data"] is not None
                 try:
                     DRS_background = current_data['drs_background']
                     xaxis_DRS = current_data['xaxis_DRS']
-                    labels = []
+                    labels_DRS = []
                     try:
                         x_lims = (float(self.lineEditMinXLim.text()), float(self.lineEditMaxXLim.text()))
                     except Exception as e:
@@ -520,42 +531,63 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
                             mean_normalized_DRS = np.mean(normalized_DRS, axis=1)
                             DRS_spectrum = np.hstack((normalized_DRS, np.atleast_2d(mean_normalized_DRS).T))
                             for i in range(DRS_spectrum.shape[1]):
-                                if i == DRS_spectrum.shape[1]-1:
-                                    labels.append('mean')
-                                else:
-                                    labels.append(f"acquisition {i}")
+                                if i == 1:
+                                    labels_DRS.append('first acquisition')
+                                elif i == DRS_spectrum.shape[1]-2:
+                                    labels_DRS.append(f"last acquisition")
+                                elif i == DRS_spectrum.shape[1]-1:
+                                    labels_DRS.append('mean')
                     else:
                         DRS_spectrum = np.hstack((np.atleast_2d(DRS_background).T, current_data['drs_data']))
                         for i in range(DRS_spectrum.shape[1]):
                             if i == 0:
-                                labels.append('background')
-                            else:
-                                labels.append(f"acquisition {i-1}")
-                    self.display_DRS.update_plot(xaxis_DRS, DRS_spectrum, labels, x_lims = x_lims)
+                                labels_DRS.append('background')
+                            elif i == 1:
+                                labels_DRS.append('first acquisition')
+                            elif i == DRS_spectrum.shape[1]-1:
+                                labels_DRS.append(f"last acquisition")
+                    self.display_DRS.update_plot(xaxis_DRS, DRS_spectrum, labels_DRS, x_lims = x_lims)
                 except Exception as e:
                     logger.warning(f"DRS was not plotted {e}")
-                    self.display_DRS.ax.cla() # if no DRS data to be displayed, clear axis
+                    self.display_DRS.clear() # if no DRS data to be displayed, clear axis
             else:
-                self.display_DRS.ax.cla() # if no DRS data to be displayed, clear axis
+                print("CLEARING DRS DISPLAY")
+                self.display_DRS.clear() # if no DRS data to be displayed, clear axis
 
-            if current_data["raman_data"] is not None:
-                raman_spectrum = (current_data['raman_data'] - current_data['raman_background'])
+            if current_data["raman_accumulations"] is not None:
+                raman_spectrum = (current_data['raman_accumulations'] - current_data['raman_background'])
+                raman_background = current_data['raman_background']
                 xaxis_raman = current_data['xaxis_raman'] 
-                print("current_data['raman_background']", current_data['raman_background'])
-                print("current_data['raman_data']: ", current_data['raman_data'])
-                print("raman_spectrum:", raman_spectrum)
-                if (xaxis_raman is not None) and (self.yaxis_data is not None):
+                raman_spectrum = np.hstack((raman_background, raman_spectrum))
+                labels_raman = []
+                for i in range(raman_spectrum.shape[1]):
+                        if i == 0:
+                            labels_raman.append("background")
+                        elif i == 1:
+                            labels_raman.append('first acquisition')
+                        elif i == raman_spectrum.shape[1]-1:
+                            labels_raman.append(f"last acquisition")
+                if (current_data['xaxis_raman'] is not None) and (current_data['yaxis_raman'] is not None):
+                    #prioritize displaying data with the files native x axis and y axis calibration
                     irf_raman = current_data['yaxis_raman']
                     raman_corr_irf = raman_spectrum/irf_raman
-                    self.display_raman.update_plot(xaxis_raman, raman_corr_irf)
+                    self.display_raman.update_plot(current_data['xaxis_raman'], raman_corr_irf, labels = labels_raman)
+                elif (self.xaxis_raman is not None) and (self.irf_raman is not None):
+                    #If no native x and y axis data in the current file, plot with currently loaded calibration files
+                    raman_corr_irf = raman_spectrum/self.irf_raman
+                    self.display_raman.update_plot(xaxis_raman, raman_corr_irf, labels = labels_raman)
                 elif current_data['xaxis_raman'] is not None:
-                    self.display_raman.update_plot(xaxis_raman, raman_spectrum)
+                    #if only the x axis calibration data is native to the data file, use it 
+                    self.display_raman.set_axis_labels("Raman shift (cm$^{-1}$)", "count")
+                    self.display_raman.update_plot(xaxis_raman, raman_spectrum, labels = labels_raman)
                 else:
+                    # else just plot the data with camera pixels as the x axis
+                    self.display_raman.set_axis_labels("camera pixel", "a.u.")
                     x_axis_camera_px = np.arange(raman_spectrum.shape[0]) # camera pixels
-                    self.display_raman.update_plot(x_axis_camera_px, raman_spectrum)
+                    self.display_raman.update_plot(x_axis_camera_px, raman_spectrum, labels = labels_raman)
             else:
-                self.display_raman.ax.cla() # if no raman data to be displayed, clear axis
-                
+                print("CLEARING RAMAN DISPLAY")
+                self.display_raman.clear() # if no raman data to be displayed, clear axis     
         except Exception as e:
             logger.error(e, exc_info=True) 
     
@@ -705,8 +737,8 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         print("after loading raman files content")
         raman_xaxis= data_file['xaxis'].T
         raman_bkg = data_file['background'].T
-        raman_accumulations= data_file['accumulations'].T # Transposed to fit format of DRS acquisitions
-        raman_exposure= toml_dict['acquisition_profile']['exposure_time'] # ms
+        raman_accumulations = data_file['accumulations'].T # Transposed to fit format of DRS acquisitions
+        raman_exposure = toml_dict['acquisition_profile']['exposure_time'] # ms
         return raman_xaxis, raman_bkg, raman_accumulations, raman_exposure
     
     def AEC_extrapolation(self, shutter_position: int, min_aec_exp: float, max_aec_exp: float, min_acq_exp: float, max_acq_exp: float, target_count: int) -> float:
@@ -880,11 +912,14 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             self.raman_acquisition(acq_name, acq_comment)
             raman_xaxis, raman_bkg, raman_accumulations, raman_exposure = self.get_latest_raman_data()
             print('raman_xaxis:', raman_xaxis)
-            if self.xaxis_raman:
+            print('self.xaxis_raman:', self.xaxis_raman)
+            if self.xaxis_raman is not None:
+                print("in if statement of xaxis")
                 raman_xaxis = self.xaxis_raman
+                print("raman_xaxis:", raman_xaxis)
             saved_data = self.save_acquisition(self.save_dir, acq_name, acq_comment,
                                             raman_background = raman_bkg,  xaxis_raman = raman_xaxis, 
-                                            raman_data = raman_accumulations, raman_exposure=raman_exposure)
+                                            raman_accumulations = raman_accumulations, raman_exposure=raman_exposure)
             logger.info(f"Raman acquisition done with shape {raman_accumulations.shape}")
             self.is_measuring = False
             return acq_name, saved_data
@@ -910,39 +945,44 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         """
         Method to acquire Raman and DRS spectra successively when "Raman/DRS" button is pressed 
         """
-        try:
-            logger.info("Started Raman/DRS acquisition")
-            acq_name = self.get_acquisition_name()
-            acq_comment = self.get_acquisition_comment()
-            DRS_background, xaxis_DRS, DRS_data, DRS_exposure  = self.DRS_acquisition(progress_callback) # DRS acquisition
-            self.raman_acquisition(acq_name, acq_comment) #Raman acquisition
-            raman_xaxis, raman_bkg, raman_accumulations, raman_exposure = self.get_latest_raman_data() # Get data from the file generated by ORAS
-            saved_data = self.save_acquisition(self.save_dir, acq_name, acq_comment,
-                                                DRS_spectralon = self.spectralon_spectrum, 
-                                                DRS_background = DRS_background, 
-                                                xaxis_DRS = xaxis_DRS, 
-                                                DRS_data = DRS_data, 
-                                                DRS_exposure = DRS_exposure,
-                                                raman_background = raman_bkg,  
-                                                xaxis_raman = raman_xaxis, 
-                                                raman_data = raman_accumulations, 
-                                                raman_exposure = raman_exposure) # Save in data file
-            logger.info("Raman/DRS acquisition done")
-            self.is_measuring = False
-            self.pushButtonMeasureRamanDRS.setText("Raman/DRS")
-        except Exception as e:
-             logger.error(f"Error during Raman/DRS acquisition: {e}")
-        finally:
-            self.update_ui()
+        # try:
+        logger.info("Started Raman/DRS acquisition")
+        acq_name = self.get_acquisition_name()
+        acq_comment = self.get_acquisition_comment()
+        print("Starting DRS acquisition")
+        DRS_background, xaxis_DRS, DRS_data, DRS_exposure  = self.DRS_acquisition(progress_callback) # DRS acquisition
+        print("Ended DRS acquisition")
+        print("Starting Raman acquisition")
+        self.raman_acquisition(acq_name, acq_comment) #Raman acquisition
+        raman_xaxis, raman_bkg, raman_accumulations, raman_exposure = self.get_latest_raman_data() # Get data from the file generated by ORAS
+        print("Ended Raman acquisition")
+        saved_data = self.save_acquisition(self.save_dir, acq_name, acq_comment,
+                                            DRS_spectralon = self.spectralon_spectrum, 
+                                            DRS_background = DRS_background, 
+                                            xaxis_DRS = xaxis_DRS, 
+                                            DRS_data = DRS_data, 
+                                            DRS_exposure = DRS_exposure,
+                                            raman_background = raman_bkg,  
+                                            xaxis_raman = raman_xaxis, 
+                                            raman_accumulations = raman_accumulations, 
+                                            raman_exposure = raman_exposure) # Save in data file
+        logger.info("Raman/DRS acquisition done")
+        self.is_measuring = False
+        return acq_name, saved_data
+        # except Exception as e:
+        #      logger.error(f"Error during Raman/DRS acquisition: {e}")
+        # finally:
+        #     self.update_ui()
     
     def button_raman_DRS_acquisition_worker(self):
         try:
             self.is_measuring = True
             self.pushButtonMeasureRamanDRS.setText("Measuring...")
             self.update_ui()   
-            worker = WorkerThread(self.button_raman_DRS_acquisition)
+            worker = WorkerThread(self.button_raman_DRS_acquisition, "progress_callback")
             worker.signals.result.connect(lambda t: self.update_acq_combobox(*t))
             worker.signals.finished.connect(self.update_ui)
+            worker.signals.progress.connect(logger.info)
             self.threadpool.start(worker)
         except Exception as e:
             logger.error(e, exc_info=True)
@@ -1056,7 +1096,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         try:
             possible_oras_status = ['READY', 'Not Ready', 'ACQUIRING']
             colors = ["color:green", "color:red","color:orange"]
-            print("oras status from loop worker:", oras_status)
+            #print("oras status from loop worker:", oras_status)
             if type(oras_status) == ConnectionRefusedError:
                 raise ConnectionRefusedError(oras_status)
             elif oras_status in possible_oras_status:
@@ -1075,16 +1115,15 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             self.lineEditOrasStatus.setText(oras_status)
             self.lineEditOrasStatus.setStyleSheet("color:red")
         finally:
-            self.update_ui()
+            #self.update_ui()
             return self.is_oras_linked, oras_status 
                         
     def update_ui(self):
         # Enable/disable controls if lamp is connected or not
         self.update_info()
-        print("in update_ui")
         is_lamp_connected = self.lamp_info.is_connected
         is_spectro_connected = self.spectro_info.is_connected
-        is_oras_linked = self.is_oras_linked
+        is_oras_linked = True #self.is_oras_linked À RETOURNER À INITIAL
         print("lamp status:", self.lamp_info.is_connected)
         print("spectro status:", self.spectro_info.is_connected)
         print("oras status:", self.is_oras_linked)
@@ -1120,7 +1159,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             self.labelSaveMessage.setText("Acquisition will be saved")
 
         elif self.checkBoxSave.isChecked() == False:
-            logger.info("User selected acquisitions will not be saved.") 
+            #logger.info("User selected acquisitions will not be saved.") 
             self.labelSaveMessage.setStyleSheet("color: red;") #background-color: black;
             self.labelSaveMessage.setText("Acquisition will not be saved")
         

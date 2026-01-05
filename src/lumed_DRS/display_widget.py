@@ -62,14 +62,22 @@ class DataDisplayWidget(QWidget):
         ax.set_ylim((ymin*0.9,ymax*1.1)) # Have a free 10% above and under the y lims
         return ymin,ymax
 
+    def set_axis_labels(self, x_label, y_label):
+        self.ax.set_xlabel(x_label, fontsize = 12)
+        self.ax.set_ylabel(y_label, fontsize = 12, rotation = 'vertical')
+
     def update_plot(self, xdata, ydata, labels:list = None, x_lims = None):
         colors = plt.cm.jet(np.linspace(0,1,ydata.shape[1])) # color gradient definition
         if self._plot_ref is None: 
             self._plot_ref = []
+            label_counter = 0
             for i in range(ydata.shape[1]):
                 #if first time plotting call plot method
-                if labels is not None:
-                    self._plot_ref.append(self.ax.plot(xdata, ydata[:,i], color=colors[i], label = labels[i])) 
+                if i in [0, 1, ydata.shape[1]-1]: 
+                    self._plot_ref.append(self.ax.plot(xdata, ydata[:,i], color=colors[i], label = labels[label_counter]))
+                    label_counter+=1
+                # if labels is not None:
+                #     self._plot_ref.append(self.ax.plot(xdata, ydata[:,i], color=colors[i], label = labels[i])) 
                 else:
                     self._plot_ref.append(self.ax.plot(xdata, ydata[:,i], color=colors[i])) 
         elif len(self.ax.lines) >= ydata.shape[1]:
@@ -80,40 +88,72 @@ class DataDisplayWidget(QWidget):
                 line.remove()
             # Set data in lines that remain with the new data
                 #print('i:', i, "label:", labels[i])
+            label_counter = 0
             for i,line in enumerate(self.ax.lines):
                 #update x and y data of plot instead of clearing the axes (faster)
                 line.set_ydata(ydata[:,i])
                 line.set_xdata(xdata)
                 line.set_color(colors[i])
-                if labels is not None:
-                    line.set_label(labels[i])
-
+                if i in [0, 1, ydata.shape[1]-1]: 
+                    line.set_label(labels[label_counter])
+                    label_counter += 1
         elif len(self.ax.lines) < ydata.shape[1]:
             #if number of lines is lower than the newer data we want to plot
-            print('ydata.shape:', ydata.shape)
+            label_counter = 0
             for i in range(ydata.shape[1]):
                 if i >= len(self.ax.lines):
                     # plot new lines for indexes that exceed the previous plot
                     self.ax.plot(xdata, ydata[:,i], color = colors[i])
-                    if labels is not None:
-                        self.ax.lines[i].set_label(labels[i])
+                    if i in [0, 1, ydata.shape[1]-1]:
+                        self.ax.lines[i].set_label(labels[label_counter])
+                        label_counter += 1
                 else:
                     #update y data of plot instead of clearing the axes (faster)
                     self.ax.lines[i].set_ydata(ydata[:,i]) 
                     self.ax.lines[i].set_xdata(xdata)
                     self.ax.lines[i].set_color(colors[i])
-                    if labels is not None:
-                        self.ax.lines[i].set_label(labels[i])
+                    if i in [0, 1, ydata.shape[1]-1]:
+                        self.ax.lines[i].set_label(labels[label_counter])
+                        label_counter += 1
         if labels is not None:
             self.ax.legend() # Tell matplotlib to refresh the legend
         if x_lims is not None:
             # Set the xlim and ylim to the one set by user 
             self.ax.set_xlim(x_lims) 
             ylims = self.autoset_ylim(self.ax)
-            print("x_lims, ylims:", x_lims, ylims)
         else:
-            print("automatically calculating x and y lims")
             self.ax.relim() # Recompute the data limits based on current artists if no x and y limits have been given
             self.ax.autoscale()
 
+        self.canvas.draw()
+
+    def clear(self):
+        """Remove plotted lines and legend, keep axes configuration, then redraw.
+
+        This is faster than calling ``ax.cla()`` because it preserves axis
+        limits, labels, grid and other axis-level state.
+        """
+        # Remove all line artists
+        for line in list(self.ax.lines):
+            try:
+                line.remove()
+            except Exception:
+                pass
+
+        # Remove legend if present
+        try:
+            leg = self.ax.get_legend()
+            if leg is not None:
+                leg.remove()
+        except Exception:
+            pass
+
+        # Reset internal plot reference so next update_plot reinitializes plots
+        self._plot_ref = None
+
+        # Ensure facecolors remain as configured
+        self.ax.set_facecolor('dimgray')
+        self.canvas.figure.patch.set_facecolor('dimgray')
+
+        # Redraw the canvas
         self.canvas.draw()
