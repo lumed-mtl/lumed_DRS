@@ -296,4 +296,5 @@ test_acquisitions
 test.py
 oras
 oras_control.py
+misc
 # End of https://www.toptal.com/developers/gitignore/api/python,jupyternotebooks,c++,linux,macos,windows
