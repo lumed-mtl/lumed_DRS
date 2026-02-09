@@ -42,13 +42,6 @@ logger = logging.getLogger(__name__)
 
 LOGS_DIR = Path.home() / "logs/lumed_DRS"
 LOG_PATH = LOGS_DIR / f"{strftime('%Y_%m_%d_%H_%M_%S')}.log"
-print(Path.home())
-LAMP_STATE = {0: "Idle", 1: "ON", 2: "Not connected"}
-STATE_COLORS = {
-    0: "QLabel { background-color : blue; }",
-    1: "QLabel { background-color : red; }",
-    2: "QLabel { background-color : grey; }",
-}
 
 LOG_FORMAT = (
     "%(asctime)s - %(levelname)s"
@@ -75,17 +68,120 @@ def configure_logger():
     logger.addHandler(terminal_handler)
     logger.addHandler(file_handler)
     # Reduce noisy output from pyvisa/pyserial internals
+    logger.setLevel(logging.DEBUG)
     logging.getLogger("pyvisa").setLevel(logging.WARNING)
     logging.getLogger("pyvisa.messagebased").setLevel(logging.WARNING)
     logging.getLogger("pyvisa-py").setLevel(logging.WARNING)
     logging.getLogger("serial").setLevel(logging.WARNING)
-    #logger.setLevel(logging.DEBUG)
+    
     # Prevent messages from being propagated to the root logger (and printed again)
     logger.propagate = False
 
 class LumedDRSWidget(QMainWindow, Ui_Form):
-    """User Interface for HL_2000_HP_232R white light lamp control.
-    Subclass HL2000Widget to customize the Ui_HL2000Widget widget"""
+    """Main GUI for controlling the Lumed DRS system and perfoming acquisitions.
+
+    Provides a graphical interface to control an HL-2000-HP-232R lamp and Maya2000pro
+    spectrometer. Performs diffuse reflectance spectroscopy (DRS) and Raman acquisitions (including combined
+    Raman+DRS), load calibration files (x/y axes and spectralon), display
+    and save spectra. Long-lived operations are run in background worker threads.
+
+    Attributes:
+    lamp (HL2000Lamp): Lamp controller instance.
+    lamp_info (LampInfo): Current lamp status and metadata.
+    last_enabled_state (bool): Last known enabled state of the lamp.
+    is_spectro_connected (bool): True when spectrometer is connected.
+    is_oras_linked (bool): True when ORAS integration is available.
+    is_measuring (bool): True while an acquisition is running.
+    mayaspectro (MayaSpectrometer): Spectrometer controller instance.
+    spectro_info (SpectroInfo): Current spectrometer status and metadata.
+    xaxis_file (str | None): Path to loaded Raman x-axis calibration file.
+    yaxis_file (str | None): Path to loaded Raman y-axis calibration file.
+    xaxis_data (dict | None): Parsed contents of the x-axis calibration file.
+    yaxis_data (dict | None): Parsed contents of the y-axis calibration file.
+    xaxis_raman (numpy.ndarray | None): Calibrated Raman x-axis values.
+    irf_raman (numpy.ndarray | None): Instrument response function of Raman acquisitions.
+    spectralon_file (str | None): Path to loaded spectralon file.
+    spectralon_data (dict | None): Parsed spectralon file contents.
+    spectralon_spectrum (numpy.ndarray | None): Processed spectralon spectrum.
+    save_dir (str | None): Directory where acquisition acquisition files are saved.
+    acqname (str | None): Current acquisition name.
+    saved_data_list (list): Loaded/saved acquisition records.
+    main_oras_dir (str): Directory for ORAS data.
+    display_raman (DataDisplayWidget): Plot widget for Raman spectra.
+    display_DRS (DataDisplayWidget): Plot widget for DRS spectra.
+    verticalLayout_raman (QVBoxLayout): Layout containing Raman plot widgets.
+    verticalLayout_DRS (QVBoxLayout): Layout containing DRS plot widgets.
+    threadpool (QThreadPool): Thread pool used for background workers.
+    oras_loop_worker (LoopWorkerThread | None): Background worker polling ORAS.
+    raman_profiles (list): Cached ORAS Raman profiles.
+    tylenol_peaks (numpy.ndarray): Reference Tylenol Raman peak positions.
+
+    Methods:
+    # ============= Instrument control methods =============
+    find_lamp() -> None: Discover connected HL-2000 lamp devices.
+    find_spectro() -> None: Discover connected Maya spectrometers.
+    connect_lamp() -> None: Connect to selected lamp and apply initial config.
+    disconnect_lamp() -> None: Disconnect the lamp safely.
+    connect_mayaspectro() -> None: Connect to selected Maya spectrometer.
+    disconnect_mayaspectro() -> None: Disconnect the Maya spectrometer.
+    enable_lamp() -> None: Enable lamp output.
+    disable_lamp() -> None: Disable lamp output and stop pulses.
+    set_initial_lamp_configurations() -> None: Sets the lamp's initial configurations
+    lamp_safety_check() -> None: Checks if lamp is in the currently expected state.
+    update_info() -> None: Updates the info related to the lamp and spectrometer state and metadata.
+
+    # ============= User file and folder selection methods =============
+    select_xaxis() -> None: Load Raman x-axis calibration from a joblib file.
+    select_yaxis() -> None: Load Raman y-axis (IRF) calibration from a joblib file.
+    select_spectralon() -> None: Load spectralon calibration spectra from a joblib file.
+    select_save_folder_dir() -> None: Set directory to save acquisition files.
+
+    # ============= DRS and Raman acquisition methods =============
+    AEC_extrapolation(...) -> float: Estimate exposure time via automatic exposure control.
+    save_acquisition(...) -> dict: Structure and optionally localy save acquisition data.
+    DRS_background_acquisition(...) -> Tuple[numpy.ndarray, numpy.ndarray]: Permforms a background measurement of a DRS acquisition.
+    DRS_acquisition(progress_callback) -> Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray, float]: Perform a DRS acquisition sequence.
+    button_DRS_acquisition(...) -> Tuple[str, dict]: Trigger a DRS acquisition sequence and saves the acquired data when DRS button is pressed by user.
+    raman_acquisition(acq_name, acq_comment) -> None: Trigger ORAS Raman acquisition.
+    button_raman_acquisition() -> Tuple[str, dict]: Trigger ORAS Raman acquisition and save acquired data when Raman button is pressed by user.
+    button_raman_DRS_acquisition() -> Tuple[str, dict]: Trigger DRS acquisition followed by ORAS Raman acquisition and save acquired data when Raman/DRS button is pressed by user.
+    
+    # ============= UI control methods =============
+    setup_default_ui() -> None: Setup UI elements' default state
+    connect_ui_signals() -> None: Connect interactive UI elements to methods
+    set_labels_connected() -> None: Sets UI labels for lamp and spectrometer connection status.
+    set_label_lamp_enabled() -> None: Sets UI labels for lamp light enabling status (enabled or not).
+    update_ui() -> None: Refresh UI elements based on current system state.
+    update_acq_combobox(...) -> None: Stores data in the UI's comboBoxAcqName object.
+    display_saved_data() -> None: Plots data on the display_DRS and display_raman widgets. 
+    construct_raman_profile_combobox() -> None: Constructs the contents of the UI's comboBoxRamanProfile object.
+    construct_acq_name_combobox(...) -> None: Constructs the contents of the UI's comboBoxAcqName object.
+    set_oras_profile(...) -> None: Triggers ORAS to set the user selected profile.
+    set_oras_status_loopworker() -> None: Start background polling of ORAS status.
+    set_oras_status(...) -> None: Update UI / link state from ORAS status.
+    closeEvent(event) -> None: Handle application close, cleanup hardware and workers.
+
+    # ============= Getter methods =============
+    get_saved_acquisitions_data(...) -> list: Gets data from joblib files in the folder selected by user.
+    get_acquisition_name() -> str: Gets acquisition name entered by user.
+    get_acquisition_comment() -> str: Gets acquisition comment entered by user.
+    get_DRS_acq_params() -> tuple[float, float, float, float, int, int]: Gets DRS acquisition parameter values entered by user.
+    get_raman_profiles() -> list[str]: Gets a list of oras acquisition profile names currently available in ORAS.
+    get_latest_raman_files() -> str: Retrieves the last .joblib and .toml files generated by ORAS.
+    get_latest_raman_data() -> Tuple[numpy.ndarray]: Retrieves raman spectra data from the joblib and toml files returned by get_latest_raman_files().
+    
+    # ============= Threading methods =============
+    *_worker() -> None: Run methods in background workers and update UI when done.
+
+    Example:
+    ```python
+    import sys
+    app = QApplication(sys.argv)
+    w = LumedDRSWidget()
+    w.show()
+    app.exec_()
+    ```
+    """
 
     def __init__(self, parent=None):
         super().__init__()
@@ -113,10 +209,9 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.spectralon_spectrum: np.ndarray|None = None 
         self.save_dir:  str|None = None
         self.acqname: str|None = None
-        self.acqnames_list: list = []
-        self.comments_list: list = []
         self.saved_data_list: list = []
-        self.main_oras_dir: str = "C:/Users/nerfi/oras/" # "/home/lumed/oras/" #
+        self.main_oras_dir: str = "C:/Users/nerfi/oras/data/" # "/home/lumed/oras/data/" #
+        
         #Setup display
         self.display_raman = DataDisplayWidget()
         self.verticalLayout_raman = QtWidgets.QVBoxLayout()
@@ -130,17 +225,17 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.verticalLayout_DRS.addWidget(self.display_DRS.toolbar)
         self.DRSTab.setLayout(self.verticalLayout_DRS)
         self.display_DRS.set_axis_labels("wavelength (nm)", "count")
+        
         #Thread management
         self.threadpool = QThreadPool()
         logger.info(f"Widget initialization complete. Multithreading with max {self.threadpool.maxThreadCount()} threads.")
+        
         # Setup ui 
         self.setup_default_ui()
         self.connect_ui_signals()
-        self.set_oras_status_loopworker() # oras status is continuously being probed by a dedicated thread
-        #self.setup_update_timer()
-        self.setup_pulse_timer()
+        self.set_oras_status_loopworker() # oras status is continuously probed by a dedicated thread
         self.update_ui()
-        #Tylenol peaks for xaxis
+        #Tylenol peaks for x-axis calibration
         self.tylenol_peaks = np.array([390.9,  651.6,  797.2,  857.9, 1168.5, 1236.8,
                           1278.5, 1323.9, 1371.5, 1561.6, 1609, 1648.4])
 
@@ -150,7 +245,8 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.checkBoxSave.setChecked(True)
         self.groupBoxSpectralonNormalization.setChecked(False) # Make the normalization check unavailable until a spectralon file is selected 
         self.groupBoxSpectralonNormalization.setEnabled(False) # Make the normalization check unavailable until a spectralon file is selected 
-    
+        self.radioButtonSelectedSpectralon.setChecked(True)
+        
     def connect_ui_signals(self):
         self.pushbtnFindLamp.clicked.connect(self.find_lamp_worker) #find_lamp
         self.pushbtnConnectLamp.clicked.connect(self.connect_lamp_worker) #self.connect_lamp
@@ -171,7 +267,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.comboBoxAcqName.currentTextChanged.connect(self.display_saved_data)  #lambda _: self.display_saved_data()
         self.comboBoxRamanProfile.currentTextChanged.connect(self.set_oras_profile) # automatically sets the new oras profile for raman acquisition when combobox selection is changed
         self.groupBoxSpectralonNormalization.clicked.connect(self.display_saved_data)
-        self.radioButtonSelectedSpectralon.setChecked(True)
+        
     def display_test_data(self):
         x = np.arange(100)
         mu = 0
@@ -236,13 +332,16 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             worker.signals.finished.connect(self.update_ui)
         except Exception as e:
             logger.error(e, exc_info=True)
-
+            
     def connect_lamp(self):
-        self.lamp.comport = self.comboBoxAvailableLamp.currentText()
-        print("self.lamp.comport:", self.lamp.comport)
-        self.lamp.connect()
-        logger.info("Connected lamp : %s", self.lamp.comport)
-        self.set_initial_lamp_configurations()
+        try:
+            self.lamp.comport = self.comboBoxAvailableLamp.currentText()
+            print("self.lamp.comport:", self.lamp.comport)
+            self.lamp.connect()
+            logger.info("Connected lamp : %s", self.lamp.comport)
+            self.set_initial_lamp_configurations()
+        except Exception as e:
+            logger.error(e, exc_info=True)
 
     def connect_lamp_worker(self):
         logger.info("Connecting lamp")
@@ -351,6 +450,8 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
 
     #Calibration files selection
     def select_xaxis(self):
+        """Lets the user select a tylenol x-axis calibration file and calculates the x-axis using known tylenol peak positions
+        """
         try:
             self.xaxis_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a file to set xaxis", filter=("Text files (*.joblib)"))[0] #CHANGE FILTER PARAMETER
             print('self.xaxis_files: ', self.xaxis_file, 'type: ', type(self.xaxis_file))
@@ -378,7 +479,6 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
                     peaks, props = find_peaks(raman_snv, prominence=h)
             self.xaxis_raman = np.polyval(np.polyfit(peaks, self.tylenol_peaks, 2), np.arange(raman_snv.size))
             self.display_raman.update_plot(self.xaxis_raman, raman_tyl.reshape(raman_tyl.shape[0],1), labels = ["tylenol"])
-            return self.xaxis_raman
         except Exception as e: 
             if type(self.xaxis_file) is str and (len(self.xaxis_file) == 0): # If True, file selection was canceled
                 logger.info("Canceled: No Raman xaxis file was selected")
@@ -386,10 +486,13 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         finally:
             self.update_ui()
             
-    def select_yaxis(self):
+    def select_yaxis(self) -> None:
+        """Lets the user select a y-axis calibration file and calculates the instrument  response function (IRF)
+        """
+
         try:
             if self.xaxis_raman is None:
-                logger.info("Canceled: No Raman x axis file was selected before selecting y axis file")
+                logger.info("Canceled y axis selection: No Raman x axis file was selected before selecting y axis file")
                 raise Exception("No yaxis file selected. Select a yaxis file first")
             self.yaxis_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a file to set y axis", filter=("Text files (*.joblib)"))[0]
             print('self.yaxis_files: ', self.yaxis_file, 'type: ', type(self.yaxis_file))
@@ -407,7 +510,6 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             self.irf_raman = la.get_correction_curve(self.xaxis_raman, raw_mean) # get instrument response function (IRF) from xaxis (cm-1) and measured nist (raw_mean)
             self.irf_raman = self.irf_raman.reshape(self.irf_raman.shape[0],1)
             self.display_DRS.update_plot(self.xaxis_raman, self.irf_raman, labels = ["IRF"])
-            return self.irf_raman
         except Exception as e: 
             if type(self.yaxis_file) is str and (len(self.yaxis_file) == 0): # If True, file selection was canceled
                 logger.info("Canceled: No Raman y axis file was selected")
@@ -415,7 +517,9 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         finally:
             self.update_ui()
 
-    def select_spectralon(self):
+    def select_spectralon(self) -> None:
+        """Lets the user select a file containing DRS spectra of a spectralon calibration standard.
+        """
         try:
             self.spectralon_file = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Select a spectralon file", filter=("Joblib files (*.joblib)"))[0] #CHANGE FILTER PARAMETER
             print('self.spectralon_file: ', self.spectralon_file, 'type: ', type(self.spectralon_file))
@@ -429,24 +533,12 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             logger.info("Selected spectralon file: %s", url.fileName())
             self.spectralon_spectrum = np.mean(self.spectralon_data['drs_data'], axis=1) - self.spectralon_data['drs_background']
             print("spectralon data keys:", self.spectralon_data.keys(), self.spectralon_spectrum)
-            return self.spectralon_spectrum
         except Exception as e: 
             if type(self.spectralon_file) is str and (len(self.spectralon_file) == 0): # If True, file selection was canceled
                 logger.info("Canceled: No Spectralon file was selected")
             logger.error(e, exc_info=True)
 
-    # def switch_radio_buttons(self):
-    #     if self.radioButtonNativeSpectralon.isChecked():
-    #         self.radioButtonSelectedSpectralon.setChecked(False)
-    #     elif self.radioButtonSelectedSpectralon.isChecked():
-    #         self.radioButtonNativeSpectralon.setChecked(False)
-    #TODO
-    #Add Raman profile and model selection HERE
-    #Add acquisition function
-    #Add comments and acq names retrieval into a list according to current save folder directory
-    #Display comments following acq names present in combobox
-    #Data saving directory selection 
-    def select_save_folder_dir(self):
+    def select_save_folder_dir(self) -> None:
         """Opens a window to select a folder directory"""
         print("SELECTING FOLDER")
         self.save_dir = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Directory to save data")
@@ -455,7 +547,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         print("Getting saved acquisitions data")
         self.saved_data_list = self.get_saved_acquisitions_data(directory=self.save_dir)
         print("Got saved acquisitions data")
-        self.construct_acq_name_combobox(data_list= self.saved_data_list)
+        self.construct_acq_name_combobox(data_list=self.saved_data_list)
         self.update_ui()
 
     def save_acquisition(self, directory, acq_name, acq_comment, 
@@ -464,7 +556,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         """
         Structures data into a dictionnary and saved into .joblib file.
         inputs
-
+        ...
         outputs 
         saved_data: dictionnary with measured data 
         """
@@ -482,14 +574,14 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         saved_data['raman_exposure'] = raman_exposure
         saved_data['yaxis_raman'] = self.irf_raman
         self.saved_data_list.append(saved_data) #add newer data to list of saved data to be displayed on ui
-        # Save on local memory if requeseted by user from ui checkbox
+        # Save on local memory if requested by user from ui checkbox
         if (self.checkBoxSave.isChecked() == True) and (self.save_dir is not None):
             print("in if checkbox")
             filename = acq_name.replace(" ", "_")+".joblib" #make name into snakecase
             with open(directory+'/'+filename, 'w') as f:# Save data in .joblib file
                 print(f"Saving at {directory}\\{filename}")
                 joblib.dump(saved_data, directory +'/'+ filename)
-            logger.info(f"Saved at {directory}\\{filename}")
+            logger.info(f"Saved acquisition at {directory}\\{filename}")
             print("finished saving")
         return saved_data
 
@@ -501,8 +593,9 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         try:
             current_data = self.comboBoxAcqName.currentData()
             self.textEditComment.setPlainText(current_data["comment"]) #access the data linked to the combobox item
-            print("------------DISPLAYING DATA-----------")
+            print("-----------DISPLAYING DATA-----------")
             print("current data:", current_data)
+            print("name:", current_data['acquisition_name'])
             print("DRS:", current_data["drs_data"])
             print("RAMAN:", current_data["raman_accumulations"])
             if current_data["drs_data"] is not None: #if current_data["drs_data"] is not None
@@ -601,8 +694,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
                 self.comboBoxRamanProfile.addItem(profile)
         except Exception as e:
             logger.error(e, exc_info=True) 
-            
-
+        
     def construct_acq_name_combobox(self, data_list: list | None = None):
         try:
             if data_list is None:
@@ -645,23 +737,16 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
                     data_file = joblib.load(f)
                     print(data_file)
                     data_list.append(data_file) # load data)
-                    # self.acqnames_list.append(data_file['acquisition_name'])
-                    # self.comments_list.append(data_file['comment'])
-                    # TODO
-                    # Add DRS and Raman Data to be extracted from file
             return data_list
         except Exception as e:
             logger.error(e, exc_info=True) 
 
     def get_acquisition_name(self) -> str:
         self.acqname = self.lineEditAcqName.text().replace(" ", "_")
-        self.acqnames_list.append(self.acqname)
         return self.acqname
     
     def get_acquisition_comment(self) -> str:
         comment = self.textEditComment.toPlainText()
-        print("self.comment: ",comment," self.textEditComment.toPlainText(): ", self.textEditComment.toPlainText())
-        self.comments_list.append(comment)
         return comment
 
     def get_DRS_acq_params(self):
@@ -694,16 +779,12 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             logger.error(e, exc_info=True)            
         return self.raman_profiles
     
-    def get_exposure(self):
-        logger.info("Setting Exposure time to : %s", self.doubleSpinBoxExposure.value())
-        return self.doubleSpinBoxExposure.value()
-    
     def get_latest_raman_files(self):
+
         try:
             print("in get latest raman files")
-            folders_dir = self.main_oras_dir + 'data'
-            logger.info(f"Looking into following folder for Raman data: {folders_dir}")
-            walk = os.walk(folders_dir) #top down walk of directory content in tuples of (root,dirs,files)
+            logger.info(f"Looking into following folder for Raman data: {self.main_oras_dir}")
+            walk = os.walk(self.main_oras_dir) #top down walk of directory content in tuples of (root,dirs,files)
             data_paths = []
             print("walk:", walk)
             for (root,dirs,files) in walk:
@@ -728,13 +809,10 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
     
     def get_latest_raman_data(self):
         # Function to get raman data in file saved by oras.
-        print("before get latest raman files")
         joblib_file, toml_file = self.get_latest_raman_files()
-        print("after get latest raman files:",joblib_file, toml_file )
         with open(joblib_file, 'rb') as joblib_f, open(toml_file, 'rb') as toml_f:
             data_file = joblib.load(joblib_f)
             toml_dict = tomli.load(toml_f)
-        print("after loading raman files content")
         raman_xaxis= data_file['xaxis'].T
         raman_bkg = data_file['background'].T
         raman_accumulations = data_file['accumulations'].T # Transposed to fit format of DRS acquisitions
@@ -744,7 +822,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
     def AEC_extrapolation(self, shutter_position: int, min_aec_exp: float, max_aec_exp: float, min_acq_exp: float, max_acq_exp: float, target_count: int) -> float:
         """
         This automatic exposure control algorithm tries to measure two values of max count with their associated 
-        exposure times. It then extrapolates, with a linear curve, the exposure that maximizes dynamic range while being within max_acq_exp and min_acq_exp.
+        exposure times. It then extrapolates, with a linear function, the exposure that maximizes dynamic range while being within max_acq_exp and min_acq_exp.
         """
         try:
             hardware_min_exposure, hardware_max_exposure = self.mayaspectro.get_exposure_time_lims() #minimal exposure time in ms (/1000 to convert from micro seconds to ms)
@@ -896,7 +974,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         finally:
             self.update_ui()
 
-    def raman_acquisition(self, acq_name, acq_comment):
+    def raman_acquisition(self, acq_name, acq_comment) -> None:
         try:
             ext.set_file_name(acq_name) #Sets the file name in ORAS
             ext.set_comment(acq_comment) #Sets the comment in ORAS
@@ -911,12 +989,8 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             acq_comment = self.get_acquisition_comment()
             self.raman_acquisition(acq_name, acq_comment)
             raman_xaxis, raman_bkg, raman_accumulations, raman_exposure = self.get_latest_raman_data()
-            print('raman_xaxis:', raman_xaxis)
-            print('self.xaxis_raman:', self.xaxis_raman)
             if self.xaxis_raman is not None:
-                print("in if statement of xaxis")
                 raman_xaxis = self.xaxis_raman
-                print("raman_xaxis:", raman_xaxis)
             saved_data = self.save_acquisition(self.save_dir, acq_name, acq_comment,
                                             raman_background = raman_bkg,  xaxis_raman = raman_xaxis, 
                                             raman_accumulations = raman_accumulations, raman_exposure=raman_exposure)
@@ -989,9 +1063,6 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         finally:
             self.update_ui()
 
-    def get_acquisition_comments(self):
-        return None
-
     def enable_lamp(self):
         logger.info("Enabling lamp")
         self.lamp.set_enable(True)
@@ -1002,19 +1073,6 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.lamp.set_enable(False)
         tt.sleep(0.5) #wait for lamp to turn off
         self.last_enabled_state = False
-        self.pulse_timer.stop() #If a pulse is running and disable button is pressed, the pulse will be stopped
-
-    def set_timed_pulse(self):
-        """A timed pulse controlled by the user"""
-        pulse_time = self.spinboxPulseDuration.value() #in milliseconds
-        self.enable_lamp()
-        self.pulse_timer.start(pulse_time) #wait the pulse time and then disable lamp     
-
-    # def set_shutter_position(self):
-    #     shutter_position = self.spinboxShutterPosition.value()
-    #     logger.info("Setting lamp shutter position : %s", shutter_position)
-    #     self.lamp.set_shutter_position(shutter_position)
-    #     self.update_ui()
 
     def set_initial_lamp_configurations(self):
         if self.lamp_info.is_connected:
@@ -1025,18 +1083,6 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             self.lamp.set_shutter_position(-400)
             logger.info("Setting lamp shutter closed position as home position")
             self.lamp.set_home_position()
-
-    def setup_update_timer(self):
-        """Creates the PyQt Timer and connects it to the function that updates
-        the UI and gets the lamp infos."""
-        self.update_timer = QTimer()
-        self.update_timer.setInterval(100)
-        self.update_timer.timeout.connect(self.update_ui)
-    
-    def setup_pulse_timer(self):
-        self.pulse_timer = QTimer()
-        self.pulse_timer.timeout.connect(self.disable_lamp)
-        self.pulse_timer.setSingleShot(True)
         
     def set_labels_connected(self, lamp_isconnected: bool, spectro_isconnected: bool) -> None:
         if spectro_isconnected:
@@ -1092,6 +1138,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             #self.lineEditOrasStatus.setStyleSheet("color:green")
         #self.lineEditOrasStatus.setText(self.oras_status)
         return self.oras_status
+    
     def set_oras_status(self, oras_status):
         try:
             possible_oras_status = ['READY', 'Not Ready', 'ACQUIRING']
@@ -1115,7 +1162,6 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             self.lineEditOrasStatus.setText(oras_status)
             self.lineEditOrasStatus.setStyleSheet("color:red")
         finally:
-            #self.update_ui()
             return self.is_oras_linked, oras_status 
                         
     def update_ui(self):
@@ -1123,7 +1169,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.update_info()
         is_lamp_connected = self.lamp_info.is_connected
         is_spectro_connected = self.spectro_info.is_connected
-        is_oras_linked = True #self.is_oras_linked À RETOURNER À INITIAL
+        is_oras_linked = True #self.is_oras_linked DOIT ÊTRE RETOURNÉ À self.is_oras_linked
         print("lamp status:", self.lamp_info.is_connected)
         print("spectro status:", self.spectro_info.is_connected)
         print("oras status:", self.is_oras_linked)
@@ -1147,8 +1193,9 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             self.pushButtonMeasureDRS.setText("DRS")
             self.pushButtonMeasureRaman.setText("Raman")
             self.pushButtonMeasureRamanDRS.setText("Raman\\DRS")
-        
+        # update UI based on lamp_info and spectro_info
         self.set_labels_connected(is_lamp_connected, is_spectro_connected)
+        self.set_label_lamp_enabled(self.lamp_info.is_enabled)
 
         if (self.saved_data_list is not None) and (len(self.saved_data_list) > 0)  and (not self.is_measuring):
             self.display_saved_data()
@@ -1175,14 +1222,11 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             self.last_enabled_state = is_enabled
 
     def update_info(self):
-         self.lamp_info = self.lamp.get_info()
-         self.spectro_info = self.mayaspectro.get_info()
-         self.lamp_safety_check()
+        self.lamp_info = self.lamp.get_info()
+        self.spectro_info = self.mayaspectro.get_info()
+        self.lamp_safety_check()
 
-    #     # update UI based on LampInfo
-         self.set_label_lamp_enabled(self.lamp_info.is_enabled)
-
-    def closeEvent(self, event: QCloseEvent):
+    def closeEvent(self, event: QCloseEvent) -> None:
         """
         This method is called when a close request is received for the window.
         """
@@ -1225,30 +1269,17 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             self.threadpool.waitForDone(2000)  #ms 
         except Exception:
             logger.exception("Error while waiting for threadpool to finish")
-        
-    # def closeEvent(self, event: QCloseEvent):
-    #     # request worker to stop, wait a short time for clean exit
-    #     try:
-    #         if hasattr(self, "threadpool"):
-    #             print('in hasattr')
-    #             self.threadpool.waitForDone(-1)  # ms
-    #     except Exception:
-    #         pass
-    #     event.accept()
 
 if __name__ == "__main__":
 
     # Set up logging
     configure_logger()
-
     try:    
         # Create app window
         app = QApplication(sys.argv)
         window = LumedDRSWidget()#QMainWindow()
         window.show()
-        
         #window.setCentralWidget(LumedDRSWidget())
-
         app.exec_()
     except:
         window.LumedDRSWidget.threadpool.stop()
