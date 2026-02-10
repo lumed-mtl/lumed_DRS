@@ -26,11 +26,7 @@ class MayaSpectrometer:
         self.device = None
         self.spectro_id: str = None
         self.isconnected = False
-        # Default trigger mode: 0
-        # 0 = Normal – Continuously scanning 
-        # 1 = External Hardware Level Trigger Mode 
-        # 2 = External Synchronous Trigger Mode 
-        # 3 = External Hardware Edge Trigger Mode     
+           
         self.trigger_mode = 0 
         self.info = SpectroInfo()
     def find_spectros(self):
@@ -54,6 +50,17 @@ class MayaSpectrometer:
             return False
 
     def set_trigger_mode(self, trig_mode):
+        
+        """
+        Sets the trigger mode of ocean optics spectrometer.
+        
+        Args:
+            trig_mode (int): trigger mode to be set
+                - 0: Continuously scanning (Default)
+                - 1: External Hardware Level Trigger Mode
+                - 2: External Synchronous Trigger Mode
+                - 3: External Hardware Edge Trigger Mode
+        """
         spam_spec = importlib.util.find_spec("worker")
         found_worker_module = spam_spec is not None
         if found_worker_module:
