@@ -291,7 +291,6 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
-useful_commands.txt
 test_acquisitions
 test.py
 oras

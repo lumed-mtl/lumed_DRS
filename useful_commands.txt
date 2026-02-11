@@ -1,0 +1,35 @@
+Transform .ui file into .py:
+pyuic5 -o ui/Lumed_DRS_ui.py ui/lumed_DRS.ui 
+
+pip install package in editable mode:
+pip install -e [path to package]
+
+Make requirements.txt file only with libraries used by the project. The --ignore flag ignore the oras venv
+pipreqs . --ignore "oras"
+
+To activate virtual environment 
+
+lumed packages to be added to requirements.txt:
+oras @ file:///home/lumed/oras_installer/v2.2/oras-2.2-py3-none-any.whl
+lumed_andor @ file:///home/lumed/oras_installer/v2.2/lumed_andor-2.0rc2-py3-none-any.whl
+lumed_ips @ file:///home/lumed/oras_installer/v2.2/lumed_ips-2.1-py3-none-any.whl
+lumed_tpm @ file:///home/lumed/oras_installer/v2.2/lumed_tpm-2.2-py3-none-any.whl
+
+ON LINUX to allow the communication to OCEAN OPTICS HL-2000-HP-232 halogen lamp
+
+1. Update the usb .rules file located at /etc/udev/rules.d/ by running:
+
+sudo nano /etc/udev/rules.d/99-usbusers.rules
+
+2. Add the following rule to the file:
+
+KERNEL=="ttyUSB*", MODE="0666", GROUP=="dialout"
+
+3. Save modification by pressing Ctrl + O
+
+4. Leave the text editor with Ctrl + X
+
+5. Apply new rules:
+
+sudo udevadm control --reload-rules && sudo udevadm trigger
+
