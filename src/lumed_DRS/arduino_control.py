@@ -69,6 +69,7 @@ class Arduino:
             return None
     def connect(self):
         try:
+            print("finding arduino device")
             self.arduino_DRS_resource = self.find_arduino_device()
             self.pyvisa_serial = self.resource_manage.open_resource(self.arduino_DRS_resource)
             self.isconnected = True
@@ -132,9 +133,11 @@ class Arduino:
                 print(e)
     def generate_pulse(self):
         try:
-            # pin_state = self._safe_scpi_query("ON")
+            #pin_state = self._safe_scpi_query("ON")
             # print(f"ttl pin state:", pin_state)
+            print("before generated pulse")
             self._safe_scpi_write("ON")
+            print("generated pulse")
         except Exception as e:
             print("Generate pulse error:", e)
     def stop_pulse(self):

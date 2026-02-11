@@ -750,8 +750,6 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         try:
             if data_list is None:
                 data_list = self.saved_data_list
-            if not data_list:
-                return # do nothing if self.data_file_list is None 
             print("Before self.comboBoxAcqName.currentIndex(): ",self.comboBoxAcqName.currentIndex(), 'self.comboBoxAcqName.currentText():', self.comboBoxAcqName.currentText())
             self.comboBoxAcqName.blockSignals(True)
             self.comboBoxAcqName.clear()
@@ -797,6 +795,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
                     data_file = joblib.load(f)
                     print(data_file)
                     data_list.append(data_file) # load data)
+            print("data_list:", data_list)
             return data_list
         except Exception as e:
             logger.error(e, exc_info=True) 
@@ -893,7 +892,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
     def get_latest_raman_data(self)->tuple:
         """Extract Raman spectra data from latest ORAS output files.
         Returns:
-            tuple(np.ndarray, np.ndarray, np.ndarray, np.ndarray): Data extracted from most recent Raman acquisition
+            out(tuple(np.ndarray, np.ndarray, np.ndarray, np.ndarray)): Data extracted from most recent Raman acquisition
                 * index 0 (np.ndarray): Raman x-axis
                 * index 1 (np.ndarray): Raman background
                 * index 2 (np.ndarray): Raman accumulations
@@ -912,7 +911,8 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
     def AEC_extrapolation(self, shutter_position: int, min_aec_exp: float, max_aec_exp: float, min_acq_exp: float, max_acq_exp: float, target_count: int) -> float:
         """
         This automatic exposure control algorithm measures two values of max count with their associated user determined 
-        exposure times. It then extrapolates, with a linear function, the exposure that maximizes dynamic range while being within max_acq_exp and min_acq_exp.
+        exposure times. It then extrapolates or interpolates, with a linear function, the exposure that maximizes dynamic 
+        range while being within max_acq_exp and min_acq_exp.
         
         Args:
             shutter_position (int): Halogen lamp shutter position (between 0 to approx 370)
@@ -923,7 +923,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             target_count (int): the target max count of a single accumulation
 
         Returns:
-            None
+            out (float): optimal exposure in ms
         """
         try:
             hardware_min_exposure, hardware_max_exposure = self.mayaspectro.get_exposure_time_lims() #minimal exposure time in ms (/1000 to convert from micro seconds to ms)
@@ -933,20 +933,20 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
                 logger.warning("The given maximum exposure is higher then the spectrometer's maximum,\nMax exposure set to hardware maximum: %f ms", hardware_max_exposure)            
             elif max_acq_exp <= hardware_min_exposure:
                 logger.error("The given maximum exposure is lower then the spectrometer's minimum of %f ms.", hardware_min_exposure)
-                return None
-            
+                raise ValueError("The given maximum exposure is lower then the spectrometer's minimum of %f ms.", hardware_min_exposure)
             if (min_acq_exp <= hardware_min_exposure):
                 min_acq_exp = hardware_min_exposure
                 logger.warning("The given minimum exposure is lower then the spectrometer's minimum.\nMin exposure set to hardware minimum: %f ms", hardware_min_exposure)
             elif (min_acq_exp > hardware_max_exposure):
                 logger.error("Minimimum exposure exceeds hardware maximum of %f ms", hardware_max_exposure)
-                return None
-            
+                raise ValueError("Minimimum exposure exceeds hardware maximum of %f ms", hardware_max_exposure)
             if target_count > hardware_max_count:
                 target_count = hardware_max_count
                 logger.warning("The given maximum count is higher than the maximum count measurable by the spectrometer.\nThe target count will be set to the hardware's highest measurable count: %f", hardware_max_count)
-
-        except Exception as e:
+            if min_aec_exp >= max_aec_exp:
+                logger.error("Minimimum aec exposure exceeds maximum aec exposure. Re-enter values")
+                raise ValueError("Minimimum aec exposure exceeds maximum aec exposure. Re-enter values")
+        except ValueError as e:
             logger.error("AEC failed: %s", str(e))
             self.disable_lamp() 
             return None
@@ -964,21 +964,34 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             print("-------in while loop-------")
             print(f"max counts is: {max_counts}")
             print(f"initial exposures: {exposures}")
-            exposures = exposures - 0.3*exposures # If one of the higher exposure time leads to a max count equal to the hardware max, reduce it by 30%
-            print(f"new exposures: {exposures}")
-            if exposures[0] <= hardware_min_exposure:
-                exposures[0] = hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
-            
-            if exposures[1] <= hardware_min_exposure:
-                exposures[0] = hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
+            if (max_counts[0] >= hardware_max_count) and max_counts[1] >= hardware_max_count:
+                exposures = exposures - 0.3*exposures # If one of the higher exposure time leads to a max count equal to the hardware max, reduce it by 30%
+                if exposures[0] <= hardware_min_exposure:
+                    exposures[0] = hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
                 max_counts = np.array([np.max(self.mayaspectro.spectrum_acquisition(exposures[0])[1]), 
                                        np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])])
-                print("breaking")
-                break
-            max_counts = np.array([np.max(self.mayaspectro.spectrum_acquisition(exposures[0])[1]), 
-                                   np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])])
-            print(f"new max counts: {max_counts}")
-        
+            elif max_counts[1] >= hardware_max_count:
+                exposures[1] = 0.7*exposures[1]
+                if exposures[1] <= hardware_min_exposure:
+                    exposures[1] = 1.3*exposures[0] # set the min exposure to a value higher than the minimum exposure 
+                max_counts[1] = np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])
+            print(f"new exposures: {exposures}")
+            
+            ###### à réparer en ne faisant que les acquisitions pour les temps d'exposition qui saturent
+            # exposures = exposures - 0.3*exposures
+            # if exposures[0] <= hardware_min_exposure:
+            #     exposures[0] = hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
+            
+            # if exposures[1] <= hardware_min_exposure:
+            #     exposures[0] = hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
+            #     max_counts = np.array([np.max(self.mayaspectro.spectrum_acquisition(exposures[0])[1]), 
+            #                            np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])])
+            #     print("breaking")
+            #     break
+            # max_counts = np.array([np.max(self.mayaspectro.spectrum_acquisition(exposures[0])[1]), 
+            #                        np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])])
+            # print(f"new max counts: {max_counts}")
+            #######
         a = (max_counts[1]-max_counts[0])/(exposures[1]-exposures[0])
         b = max_counts[1]-(a*exposures[1])
         optimal_exp = (target_count - b)/a
@@ -1002,8 +1015,9 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         opt_exp_measured_count = self.mayaspectro.spectrum_acquisition(optimal_exp)[1]
 
         real_max_count = np.max(opt_exp_measured_count)
-        self.disable_lamp() #Stop illumination
-        print(f"After verification: exposures = {exposures} ms with counts = {max_counts}")
+        #self.disable_lamp() #Stop illumination
+        print(f"-------AEC DONE-------")
+        print(f"Final AEC values: exposures = {exposures} ms with counts = {max_counts}")
         print(f"AEC extrapolation parameters: a = {a}, b = {b}")
         print(f"Target count of {target_count} used to find optimal exposure: {optimal_exp} ms, with max count of {real_max_count}")
         logger.info(f"Target count of {target_count} used to find optimal exposure: {optimal_exp} ms, with max count of {real_max_count}")
@@ -1039,11 +1053,14 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         print("DRS acquisition parameters:", self.get_DRS_acq_params())
         if self.get_DRS_acq_params() == None:
             return None
-        # Get optimal exposure
-        min_aec_exp, max_aec_exp, min_acq_exp, max_acq_exp, target_count, N_accumulations = self.get_DRS_acq_params()
-        shutter_position = 400 #value of max shutter opening to make sure that it is completely open
-        aec_exposure = self.AEC_extrapolation(shutter_position, min_aec_exp, max_aec_exp, min_acq_exp, max_acq_exp, target_count)    
-        print("aec_exposure", aec_exposure) 
+        try:
+            # Get optimal exposure
+            min_aec_exp, max_aec_exp, min_acq_exp, max_acq_exp, target_count, N_accumulations = self.get_DRS_acq_params()
+            shutter_position = 400 #value of max shutter opening to make sure that it is completely open
+            aec_exposure = self.AEC_extrapolation(shutter_position, min_aec_exp, max_aec_exp, min_acq_exp, max_acq_exp, target_count)    
+            print("aec_exposure", aec_exposure) 
+        except Exception as e:
+            return None
         
         self.lineEditSetExposure.setText(str(int(aec_exposure)))
         # Proceed with the measurement including background signal substraction

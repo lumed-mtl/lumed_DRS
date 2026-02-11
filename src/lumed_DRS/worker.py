@@ -17,9 +17,12 @@ class CustomThread(Thread):
         if self._target is not None:
             self._return = self._target(*self._args, **self._kwargs)
              
-    def join(self, *args): # .join() method of Thread being overwritten to return
-        Thread.join(self, *args)
-        return self._return
+    def join(self, *args, **kwargs): # .join() method of Thread being overwritten to return
+        try:
+            Thread.join(self, *args, **kwargs)
+            return self._return
+        except Exception:
+            traceback.print_exc()
 
 class WorkerSignals(QObject):
     """Signals from a running worker thread.

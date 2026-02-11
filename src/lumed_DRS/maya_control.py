@@ -85,6 +85,7 @@ class MayaSpectrometer:
             self.arduino.connect()
             self.spectro.trigger_mode(0) # Set the to trigger mode 0 even though its already at this trigger mode by default ¯\_(ツ)_/¯
             if self.arduino.isconnected: # arduino device exists
+                print("performing dummy acquisition")
                 wavelenghts, counts = self.spectrum_acquisition(8) # dummy acquisition of 8 ms so that spectrometer can properly change its trigger mode ¯\_(ツ)_/¯
                 self.trigger_mode = 3 #set the trigger mode to external hardware if arduino is connected
             self.isconnected = True
@@ -109,17 +110,26 @@ class MayaSpectrometer:
             exposure_time * 1000)  # *1000 because the exposure time is given in microseconds to the function
         print("acquisition with trigger mode:", self.trigger_mode)
         if self.trigger_mode == 3:
+            
+            #Start the spectrum acquisition thread
             spectrum_thread = CustomThread(target=self.spectro.spectrum)
             print(f"INITIALIZED THREAD:")
             spectrum_thread.start()
             print(f"STARTED THREAD:")
-            #send trigger pulse with a delay
+            #Small delay to ensure spectrum() is actually running and waiting for trigger
+            tt.sleep(0.5)
+            # trigger pulse after thread is listening
             self.arduino.generate_pulse()
             print(f"Generated pulse")     
-            wavelengths, counts = spectrum_thread.join()
+            
+            #Wait for the thread to complete with timeout
+            wavelengths, counts = spectrum_thread.join(timeout=10.0)
+            if wavelengths is None or counts is None:
+                print(f"ERROR: Thread timeout - no response from spectrometer")
+                raise TimeoutError("Spectrometer spectrum acquisition timed out. Check hardware trigger connection.")
             print(f"Joined thread")    
         else:
-            # Get wavelengths and intensities
+            #Get wavelengths and intensities
             print(f"running spectrum in else condition")  
             wavelengths, counts = self.spectro.spectrum() 
             self.spectro.features
