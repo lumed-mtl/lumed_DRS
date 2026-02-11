@@ -7,7 +7,9 @@ pip install -e [path to package]
 Make requirements.txt file only with libraries used by the project. The --ignore flag ignore the oras venv
 pipreqs . --ignore "oras"
 
-To activate virtual environment 
+To activate virtual environment:
+where venv is the virutal environemnt's name.
+source venv/bin/activate 
 
 lumed packages to be added to requirements.txt:
 oras @ file:///home/lumed/oras_installer/v2.2/oras-2.2-py3-none-any.whl
