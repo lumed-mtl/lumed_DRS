@@ -106,11 +106,13 @@ class MayaSpectrometer:
         combined array of wavelengths and measured intensities
         """
         # Set exposure time
-        self.spectro.integration_time_micros(
-            exposure_time * 1000)  # *1000 because the exposure time is given in microseconds to the function
+        try:
+            print(f"Setting exposure time to {exposure_time} ms")
+            self.spectro.integration_time_micros(exposure_time * 1000)  # *1000 because the exposure time is given in microseconds to the function
+        except:
+            raise Exception
         print("acquisition with trigger mode:", self.trigger_mode)
         if self.trigger_mode == 3:
-            
             #Start the spectrum acquisition thread
             spectrum_thread = CustomThread(target=self.spectro.spectrum)
             print(f"INITIALIZED THREAD:")
@@ -125,7 +127,6 @@ class MayaSpectrometer:
             #Wait for the thread to complete with timeout
             wavelengths, counts = spectrum_thread.join(timeout=10.0)
             if wavelengths is None or counts is None:
-                print(f"ERROR: Thread timeout - no response from spectrometer")
                 raise TimeoutError("Spectrometer spectrum acquisition timed out. Check hardware trigger connection.")
             print(f"Joined thread")    
         else:
