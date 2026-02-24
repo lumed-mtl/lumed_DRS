@@ -106,6 +106,7 @@ class MayaSpectrometer:
         combined array of wavelengths and measured intensities
         """
         # Set exposure time
+        print("-------------before try")
         try:
             print(f"Setting exposure time to {exposure_time} ms")
             self.spectro.integration_time_micros(exposure_time * 1000)  # *1000 because the exposure time is given in microseconds to the function

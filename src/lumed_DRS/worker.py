@@ -94,7 +94,7 @@ class LoopWorkerThread(QRunnable):
             # result  = False
             n = 0
             previous_result = None 
-            
+            #tic = tt.time()
             while not self._stop_event.is_set():
                 try:
                     result = self.func(*self.args, **self.kwargs) # run the functon to be run by the thread
@@ -102,7 +102,7 @@ class LoopWorkerThread(QRunnable):
                         #print('previous_result:', previous_result, ', result:', result)
                         self.signals.result.emit(result)
                         previous_result = result
-                        # print(f"worker loop time: {tt.time() - tic} changed!")
+                        #print(f"worker loop time: {tt.time() - tic} changed!")
                 except Exception as e:
                     # emit error but continue or break as appropriate
                     self.signals.error.emit((type(e), e, traceback.format_exc()))
