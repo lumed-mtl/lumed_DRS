@@ -213,6 +213,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.saved_data_list: list = []
         self.main_oras_dir: str =  "/home/lumed/oras/data/" #"C:/Users/nerfi/oras/data/" #
         self.oras_status: str|None = None
+        self.aec_exposure: str = ""
         
         #Tylenol peaks for x-axis calibration
         self.tylenol_peaks = np.array([390.9,  651.6,  797.2,  857.9, 1168.5, 1236.8,
@@ -252,6 +253,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.groupBoxSpectralonNormalization.setChecked(False) 
         self.groupBoxSpectralonNormalization.setEnabled(False) 
         self.radioButtonSelectedSpectralon.setChecked(True)
+        self.lineEditSetExposure.setReadOnly(True)
         
     def connect_ui_signals(self):
         """
@@ -412,7 +414,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
                 self.lineEditMaxAutoExposure.setValidator(exp_validator)
                 self.lineEditMinExposure.setValidator(exp_validator)
                 self.lineEditMaxExposure.setValidator(exp_validator)
-
+                
                 #Set max count on line edit
                 max_count = self.mayaspectro.get_max_intensity()
                 print("max count:", self.mayaspectro.get_max_intensity())
@@ -646,10 +648,10 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             current_data = self.comboBoxAcqName.currentData()
             self.textEditComment.setPlainText(current_data["comment"]) #access the data linked to the combobox item
             print("-----------DISPLAYING DATA-----------")
-            print("current data:", current_data)
-            print("name:", current_data['acquisition_name'])
-            print("DRS:", current_data["drs_data"])
-            print("RAMAN:", current_data["raman_accumulations"])
+            # print("current data:", current_data)
+            # print("name:", current_data['acquisition_name'])
+            # print("DRS:", current_data["drs_data"])
+            # print("RAMAN:", current_data["raman_accumulations"])
             if current_data["drs_data"] is not None: #if current_data["drs_data"] is not None
                 try:
                     DRS_background = current_data['drs_background']
@@ -885,10 +887,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             data_paths = []
             print("walk:", walk)
             for (root,dirs,files) in walk:
-                print("before file dirs:")
-                print(root, dirs, files)
                 file_dirs  = [root+ f"/{f}" for f in files if (f.endswith('.joblib') or f.endswith('.toml'))]
-                print("file_dirs:", file_dirs)
                 data_paths+= file_dirs
             def extension_key(data):
                 if data.endswith('.joblib'):
@@ -976,6 +975,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             count_min_exposure = self.mayaspectro.spectrum_acquisition(exposures[0])[1]
             count_max_exposure = self.mayaspectro.spectrum_acquisition(exposures[1])[1]
         except Exception as e:
+            print(e)
             logger.error(f"First acquisitions of AEC failed: {e}")
         max_counts = np.array([np.max(count_min_exposure), np.max(count_max_exposure)])
         print(f"Determined counts = {max_counts[0]}, {max_counts[1]}")
@@ -1083,8 +1083,8 @@ None
         except Exception as e:
             self.disable_lamp()
             return None
+        self.aec_exposure = str(int(aec_exposure))
         
-        self.lineEditSetExposure.setText(str(int(aec_exposure)))
         # Proceed with the measurement including background signal substraction
         xaxis_DRS, DRS_background = self.DRS_background_acquisition(aec_exposure) #background to be substracted from normal acquisition
         self.enable_lamp()
@@ -1131,8 +1131,6 @@ None
             return saved_data
         except Exception as e:
             logger.error(f"Error during DRS acquisition: {e}")
-            
-            self.is_measuring = False
         
     def button_DRS_acquisition_worker(self):
         """Run DRS acquisition in background worker and update UI"""
@@ -1147,6 +1145,7 @@ None
             self.threadpool.start(worker)
         except Exception as e:
             logger.error(e, exc_info=True)
+            self.is_measuring = False
         finally:
             self.update_ui()
 
@@ -1201,6 +1200,7 @@ None
             self.threadpool.start(worker)
         except Exception as e:
             logger.error(e, exc_info=True)
+            self.is_measuring = False
         finally:
             self.update_ui()   
 
@@ -1260,7 +1260,9 @@ None
             self.threadpool.start(worker)
         except Exception as e:
             logger.error(e, exc_info=True)
+            self.is_measuring = False
         finally:
+            self.is_measuring = False
             self.update_ui()
 
     def enable_lamp(self):
@@ -1427,6 +1429,7 @@ None
                                                   (not self.is_measuring)and
                                                   (self.oras_status == "READY"))
         # update UI based on lamp_info and spectro_info
+        self.lineEditSetExposure.setText(self.aec_exposure)
         self.set_labels_connected(is_lamp_connected, is_spectro_connected)
         if is_lamp_connected == "True":
             self.set_label_lamp_enabled(self.lamp_info.is_enabled)
@@ -1524,5 +1527,6 @@ if __name__ == "__main__":
         window.show()
         #window.setCentralWidget(LumedDRSWidget())
         app.exec_()
-    except:
+    except Exception as e:
+        logger.error(e)
         window.LumedDRSWidget.threadpool.stop()
