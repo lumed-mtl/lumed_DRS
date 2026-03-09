@@ -983,15 +983,18 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
                 exposures = exposures - 0.3*exposures # If one of the higher exposure time leads to a max count equal to the hardware max, reduce it by 30%
                 if exposures[0] <= hardware_min_exposure:
                     exposures[0] = hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
+                if exposures[1] <= hardware_min_exposure:
+                    exposures[1] = 1.3*hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
+                    break
                 max_counts = np.array([np.max(self.mayaspectro.spectrum_acquisition(exposures[0])[1]), 
                                     np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])])
             elif max_counts[1] >= hardware_max_count:
                 exposures[1] = 0.7*exposures[1]
                 if exposures[1] <= hardware_min_exposure:
                     exposures[1] = 1.3*exposures[0] # set the min exposure to a value higher than the minimum exposure 
+                    max_counts[1] = np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])
                 max_counts[1] = np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])
             print(f"new exposures: {exposures}")
-        
         # Version with try-except statement
         # try:
         #     self.lamp.set_shutter_position(shutter_position)
