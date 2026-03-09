@@ -984,7 +984,7 @@
            </size>
           </property>
           <property name="text">
-           <string>50</string>
+           <string>20</string>
           </property>
           <property name="alignment">
            <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
@@ -1093,7 +1093,7 @@
            </size>
           </property>
           <property name="text">
-           <string>50</string>
+           <string>20</string>
           </property>
           <property name="alignment">
            <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>

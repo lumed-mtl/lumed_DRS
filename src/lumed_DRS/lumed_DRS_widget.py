@@ -618,7 +618,6 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.saved_data_list.append(saved_data) #add newer data to list of saved data to be displayed on ui
         # Save on local memory if requested by user from ui checkbox
         if (self.checkBoxSave.isChecked() == True) and (self.save_dir is not None):
-            print("in if checkbox")
             filename = acq_name.replace(" ", "_")+".joblib" #make name into snakecase
             with open(directory+'/'+filename, 'w') as f:# Save data in .joblib file
                 print(f"Saving at {directory}\\{filename}")
@@ -970,13 +969,10 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.lamp.set_shutter_position(shutter_position)
         self.enable_lamp() #Start illumination
         print(f'Exposures used for count determination: min exposure = {exposures[0]} ms, max exposure = {exposures[1]} ms')
-        try:
-            logger.info("Taking acquisition with given AEC exposures")
-            count_min_exposure = self.mayaspectro.spectrum_acquisition(exposures[0])[1]
-            count_max_exposure = self.mayaspectro.spectrum_acquisition(exposures[1])[1]
-        except Exception as e:
-            print(e)
-            logger.error(f"First acquisitions of AEC failed: {e}")
+        logger.info("Taking acquisition with given AEC exposures")
+        count_min_exposure = self.mayaspectro.spectrum_acquisition(exposures[0])[1]
+        count_max_exposure = self.mayaspectro.spectrum_acquisition(exposures[1])[1]
+    
         max_counts = np.array([np.max(count_min_exposure), np.max(count_max_exposure)])
         print(f"Determined counts = {max_counts[0]}, {max_counts[1]}")
         while max_counts[1] >= hardware_max_count:
@@ -988,13 +984,44 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
                 if exposures[0] <= hardware_min_exposure:
                     exposures[0] = hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
                 max_counts = np.array([np.max(self.mayaspectro.spectrum_acquisition(exposures[0])[1]), 
-                                       np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])])
+                                    np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])])
             elif max_counts[1] >= hardware_max_count:
                 exposures[1] = 0.7*exposures[1]
                 if exposures[1] <= hardware_min_exposure:
                     exposures[1] = 1.3*exposures[0] # set the min exposure to a value higher than the minimum exposure 
                 max_counts[1] = np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])
             print(f"new exposures: {exposures}")
+        
+        # Version with try-except statement
+        # try:
+        #     self.lamp.set_shutter_position(shutter_position)
+        #     self.enable_lamp() #Start illumination
+        #     print(f'Exposures used for count determination: min exposure = {exposures[0]} ms, max exposure = {exposures[1]} ms')
+        #     logger.info("Taking acquisition with given AEC exposures")
+        #     count_min_exposure = self.mayaspectro.spectrum_acquisition(exposures[0])[1]
+        #     count_max_exposure = self.mayaspectro.spectrum_acquisition(exposures[1])[1]
+        
+        #     max_counts = np.array([np.max(count_min_exposure), np.max(count_max_exposure)])
+        #     print(f"Determined counts = {max_counts[0]}, {max_counts[1]}")
+        #     while max_counts[1] >= hardware_max_count:
+        #         print("-------in while loop-------")
+        #         print(f"max counts is: {max_counts}")
+        #         print(f"initial exposures: {exposures}")
+        #         if (max_counts[0] >= hardware_max_count) and max_counts[1] >= hardware_max_count:
+        #             exposures = exposures - 0.3*exposures # If one of the higher exposure time leads to a max count equal to the hardware max, reduce it by 30%
+        #             if exposures[0] <= hardware_min_exposure:
+        #                 exposures[0] = hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
+        #             max_counts = np.array([np.max(self.mayaspectro.spectrum_acquisition(exposures[0])[1]), 
+        #                                 np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])])
+        #         elif max_counts[1] >= hardware_max_count:
+        #             exposures[1] = 0.7*exposures[1]
+        #             if exposures[1] <= hardware_min_exposure:
+        #                 exposures[1] = 1.3*exposures[0] # set the min exposure to a value higher than the minimum exposure 
+        #             max_counts[1] = np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])
+        #         print(f"new exposures: {exposures}")
+        # except Exception as e:
+        #     print(e)
+        #     logger.error(f"AEC failed: {e}")
             
             ###### à réparer en ne faisant que les acquisitions pour les temps d'exposition qui saturent
             # exposures = exposures - 0.3*exposures
@@ -1130,6 +1157,7 @@ None
             self.is_measuring = False
             return saved_data
         except Exception as e:
+            self.is_measuring = False
             logger.error(f"Error during DRS acquisition: {e}")
         
     def button_DRS_acquisition_worker(self):
@@ -1187,6 +1215,7 @@ None
             return saved_data
         except Exception as e:
             logger.error(f"Error during Raman acquisition: {e}")
+            self.is_measuring = False
 
     def button_raman_acquisition_worker(self):
         """ Run Raman acquisition in a background worker and update UI state."""
@@ -1200,7 +1229,6 @@ None
             self.threadpool.start(worker)
         except Exception as e:
             logger.error(e, exc_info=True)
-            self.is_measuring = False
         finally:
             self.update_ui()   
 
@@ -1245,6 +1273,7 @@ None
             self.is_measuring = False
             return saved_data
         except Exception as e:
+             self.is_measuring = False
              logger.error(f"Error during Raman/DRS acquisition: {e}")
     
     def button_raman_DRS_acquisition_worker(self):
@@ -1262,7 +1291,6 @@ None
             logger.error(e, exc_info=True)
             self.is_measuring = False
         finally:
-            self.is_measuring = False
             self.update_ui()
 
     def enable_lamp(self):
@@ -1334,8 +1362,9 @@ None
         """Start background worker thread for continuous ORAS status polling."""
         logger.info("Setting loop thread for oras status polling")
         try:   
-            result_test  = ext.get_system_status()
-            print("ext.get_system_status result: ", result_test)
+            initial_oras_status = ext.get_system_status()
+            # self.oras_status = initial_oras_status
+            print("initial oras status: ", initial_oras_status)
             self.oras_loop_worker = LoopWorkerThread(ext.get_system_status)  # create a long-running LoopWorkerThread instance, test method: self.test_oras_status_change
             print("after loop worker:", self.oras_loop_worker)
             self.threadpool.start(self.oras_loop_worker)
@@ -1368,8 +1397,8 @@ None
             oras_status (str): ORAS status to be displayed on UI
         Returns:
             tuple(bool, str): 
-                * index 0: ORAS connection state
-                * index 1: ORAS status
+                * index 0: ORAS connection status
+                * index 1: ORAS acquisition status
         """
         try:
             possible_oras_status = ['READY', 'Not Ready', 'ACQUIRING']
@@ -1379,6 +1408,7 @@ None
                 raise ConnectionRefusedError(oras_status)
             elif oras_status in possible_oras_status:
                 self.is_oras_linked = True
+                print("is oras linked in set_oras_status(): ", self.is_oras_linked)
                 self.oras_status = oras_status
                 self.lineEditOrasStatus.setText(f'CONNECTED: {oras_status}')
                 self.lineEditOrasStatus.setStyleSheet(colors[possible_oras_status.index(oras_status)])
@@ -1405,6 +1435,7 @@ None
         is_lamp_connected = self.lamp_info.is_connected
         is_spectro_connected = self.spectro_info.is_connected
         is_oras_linked = self.is_oras_linked
+        self.oras_status = ext.get_system_status()
         print("lamp status:", self.lamp_info.is_connected)
         print("spectro status:", self.spectro_info.is_connected)
         print("oras linked:", self.is_oras_linked)

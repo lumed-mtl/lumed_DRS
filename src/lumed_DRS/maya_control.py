@@ -1,6 +1,6 @@
 import seabreeze
 from dataclasses import dataclass
-seabreeze.use("cseabreeze")
+seabreeze.use("pyseabreeze") # cseabreeze pyseabreeze two distinct implementations
 from seabreeze.spectrometers import list_devices, Spectrometer
 import time as tt
 import importlib.util
@@ -110,7 +110,8 @@ class MayaSpectrometer:
         try:
             print(f"Setting exposure time to {exposure_time} ms")
             self.spectro.integration_time_micros(exposure_time * 1000)  # *1000 because the exposure time is given in microseconds to the function
-        except:
+        except Exception as e:
+            print(f"Error during integration time setting: {e}")
             raise Exception
         print("acquisition with trigger mode:", self.trigger_mode)
         if self.trigger_mode == 3:
