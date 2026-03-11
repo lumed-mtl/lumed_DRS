@@ -121,7 +121,7 @@ class MayaSpectrometer:
             spectrum_thread.start()
             print(f"STARTED THREAD:")
             #Small delay to ensure spectrum() is actually running and waiting for trigger
-            tt.sleep(0.5)
+            tt.sleep(0.1)
             # trigger pulse after thread is listening
             self.arduino.generate_pulse()
             print(f"Generated pulse")     
