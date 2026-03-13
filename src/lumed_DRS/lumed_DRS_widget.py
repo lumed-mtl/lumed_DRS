@@ -940,7 +940,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         """
         try:
             hardware_min_exposure, hardware_max_exposure = self.mayaspectro.get_exposure_time_lims() #minimal exposure time in ms (/1000 to convert from micro seconds to ms)
-            hardware_min_exposure = hardware_min_exposure+1
+            hardware_min_exposure +=1
             hardware_max_count = self.mayaspectro.get_max_intensity()
             if max_acq_exp > hardware_max_exposure:
                 max_acq_exp = hardware_max_exposure
@@ -996,52 +996,8 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
                     max_counts[1] = np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])
                 max_counts[1] = np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])
             print(f"new exposures: {exposures}")
-        # Version with try-except statement
-        # try:
-        #     self.lamp.set_shutter_position(shutter_position)
-        #     self.enable_lamp() #Start illumination
-        #     print(f'Exposures used for count determination: min exposure = {exposures[0]} ms, max exposure = {exposures[1]} ms')
-        #     logger.info("Taking acquisition with given AEC exposures")
-        #     count_min_exposure = self.mayaspectro.spectrum_acquisition(exposures[0])[1]
-        #     count_max_exposure = self.mayaspectro.spectrum_acquisition(exposures[1])[1]
         
-        #     max_counts = np.array([np.max(count_min_exposure), np.max(count_max_exposure)])
-        #     print(f"Determined counts = {max_counts[0]}, {max_counts[1]}")
-        #     while max_counts[1] >= hardware_max_count:
-        #         print("-------in while loop-------")
-        #         print(f"max counts is: {max_counts}")
-        #         print(f"initial exposures: {exposures}")
-        #         if (max_counts[0] >= hardware_max_count) and max_counts[1] >= hardware_max_count:
-        #             exposures = exposures - 0.3*exposures # If one of the higher exposure time leads to a max count equal to the hardware max, reduce it by 30%
-        #             if exposures[0] <= hardware_min_exposure:
-        #                 exposures[0] = hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
-        #             max_counts = np.array([np.max(self.mayaspectro.spectrum_acquisition(exposures[0])[1]), 
-        #                                 np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])])
-        #         elif max_counts[1] >= hardware_max_count:
-        #             exposures[1] = 0.7*exposures[1]
-        #             if exposures[1] <= hardware_min_exposure:
-        #                 exposures[1] = 1.3*exposures[0] # set the min exposure to a value higher than the minimum exposure 
-        #             max_counts[1] = np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])
-        #         print(f"new exposures: {exposures}")
-        # except Exception as e:
-        #     print(e)
-        #     logger.error(f"AEC failed: {e}")
-            
-            ###### à réparer en ne faisant que les acquisitions pour les temps d'exposition qui saturent
-            # exposures = exposures - 0.3*exposures
-            # if exposures[0] <= hardware_min_exposure:
-            #     exposures[0] = hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
-            
-            # if exposures[1] <= hardware_min_exposure:
-            #     exposures[0] = hardware_min_exposure # set the min exposure to the hardware minimum but not the max exposure
-            #     max_counts = np.array([np.max(self.mayaspectro.spectrum_acquisition(exposures[0])[1]), 
-            #                            np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])])
-            #     print("breaking")
-            #     break
-            # max_counts = np.array([np.max(self.mayaspectro.spectrum_acquisition(exposures[0])[1]), 
-            #                        np.max(self.mayaspectro.spectrum_acquisition(exposures[1])[1])])
-            # print(f"new max counts: {max_counts}")
-            #######
+        #calculate parameters a*(exposure_time)+b = target count 
         a = (max_counts[1]-max_counts[0])/(exposures[1]-exposures[0])
         b = max_counts[1]-(a*exposures[1])
         optimal_exp = (target_count - b)/a
@@ -1059,7 +1015,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             logger.warning("The optimal exposure is higher than the maximum set by user. Exposure set to user maximum: %f ms", max_acq_exp)
 
         elif optimal_exp <= min_acq_exp:
-            optimal_exp = min_acq_exp+1
+            optimal_exp = min_acq_exp
             logger.warning("The optimal exposure is lower than the minimum set by user. Exposure set to user minimum: %f ms", min_acq_exp)
 
         opt_exp_measured_count = self.mayaspectro.spectrum_acquisition(optimal_exp)[1]

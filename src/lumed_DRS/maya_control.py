@@ -6,11 +6,53 @@ import time as tt
 import importlib.util
 from arduino_control import Arduino
 import numpy as np
-
+import logging
+from pathlib import Path
+from time import strftime
+from threading import Lock
 try:
     from worker import CustomThread
 except ImportError:
     pass
+
+logger = logging.getLogger(__name__)
+
+# LOGS_DIR = Path.home() / "logs/lumed_DRS"
+# LOG_PATH = LOGS_DIR / f"{strftime('%Y_%m_%d_%H_%M_%S')}.log"
+
+# LOG_FORMAT = (
+#     "%(asctime)s - %(levelname)s"
+#     "(%(filename)s:%(funcName)s)"
+#     "(%(filename)s:%(lineno)d) - "
+#     "%(message)s"
+# )
+
+# def configure_logger():
+#     """Configures the logger if lumed_DRS_widget is launched as a module"""
+
+#     if not LOGS_DIR.parent.exists():
+#         LOGS_DIR.parent.mkdir()
+#     if not LOGS_DIR.exists():
+#         LOGS_DIR.mkdir()
+
+#     formatter = logging.Formatter(LOG_FORMAT)
+
+#     terminal_handler = logging.StreamHandler()
+#     terminal_handler.setFormatter(formatter)
+#     file_handler = logging.FileHandler(LOG_PATH)
+#     file_handler.setFormatter(formatter)
+
+#     logger.addHandler(terminal_handler)
+#     logger.addHandler(file_handler)
+#     # Reduce noisy output from pyvisa/pyserial internals
+#     logger.setLevel(logging.DEBUG)
+#     logging.getLogger("pyvisa").setLevel(logging.WARNING)
+#     logging.getLogger("pyvisa.messagebased").setLevel(logging.WARNING)
+#     logging.getLogger("pyvisa-py").setLevel(logging.WARNING)
+#     logging.getLogger("serial").setLevel(logging.WARNING)
+    
+#     # Prevent messages from being propagated to the root logger (and printed again)
+logger.propagate = False
 
 @dataclass
 class SpectroInfo:
@@ -30,6 +72,7 @@ class MayaSpectrometer:
            
         self.trigger_mode = 0 
         self.info = SpectroInfo()
+        self._usb_lock = Lock()
     def find_spectros(self):
         """
         find_spectros finds available devices
@@ -82,7 +125,7 @@ class MayaSpectrometer:
             # for it to properly work in the trigger mode 3 ¯\_(ツ)_/¯
             self.spectro = Spectrometer(self.device)
             #connect arduino
-            self.arduino = Arduino()
+            self.arduino = Arduino(usb_lock = self._usb_lock)
             self.arduino.connect()
             self.spectro.trigger_mode(0) # Set the to trigger mode 0 even though its already at this trigger mode by default ¯\_(ツ)_/¯
             if self.arduino.isconnected: # arduino device exists
@@ -107,37 +150,43 @@ class MayaSpectrometer:
         combined array of wavelengths and measured intensities
         """
         # Set exposure time
-        print("-------------before try")
         try:
-            print(f"Setting exposure time to {np.round(exposure_time).astype(int)} ms") #
-            self.spectro.integration_time_micros(np.round(exposure_time).astype(int)*1000)  # np.round(exposure_time).astype(int)*1000 because the exposure time is given in microseconds to the function
+            try:
+                logger.info(f"Setting exposure time to {np.round(exposure_time).astype(int)} ms") #
+                with self._usb_lock:
+                    self.spectro.integration_time_micros(np.round(exposure_time).astype(int)*1000)  # np.round(exposure_time).astype(int)*1000 because the exposure time is given in microseconds to the function 
+                tt.sleep(0.05)           
+            except Exception as e:
+                logger.error(e, exc_info=True)
+                print(f"Error during integration time setting: {e}")
+                raise Exception
+            logger.info(f"acquisition with trigger mode:{self.trigger_mode}")
+            if self.trigger_mode == 3:
+                #Start the spectrum acquisition thread
+                spectrum_thread = CustomThread(target=self.spectro.spectrum)
+                logger.info(f"Initialized spectrum thread") 
+                spectrum_thread.start()
+                logger.info(f"Started spectrum thread") 
+                #Small delay to ensure spectrum() is actually running and waiting for trigger
+                tt.sleep(0.1)
+                #trigger pulse after thread is listening
+                self.arduino.generate_pulse()
+                print(f"Generated pulse")     
+                logger.info(f"Generated pulse") 
+                #Wait for the thread to complete with timeout
+                wavelengths, counts = spectrum_thread.join(timeout=10.0)
+                if wavelengths is None or counts is None:
+                    raise TimeoutError("Spectrometer spectrum acquisition timed out. Check hardware trigger connection.")
+                logger.info(f"Joined thread")    
+            else:
+                #Get wavelengths and intensities
+                print(f"running spectrum in else condition")  
+                with self._usb_lock:
+                    wavelengths, counts = self.spectro.spectrum() 
+                self.spectro.features
+            return wavelengths, counts
         except Exception as e:
-            print(f"Error during integration time setting: {e}")
-            raise Exception
-        print("acquisition with trigger mode:", self.trigger_mode)
-        if self.trigger_mode == 3:
-            #Start the spectrum acquisition thread
-            spectrum_thread = CustomThread(target=self.spectro.spectrum)
-            print(f"INITIALIZED THREAD:")
-            spectrum_thread.start()
-            print(f"STARTED THREAD:")
-            #Small delay to ensure spectrum() is actually running and waiting for trigger
-            tt.sleep(0.1)
-            #trigger pulse after thread is listening
-            self.arduino.generate_pulse()
-            print(f"Generated pulse")     
-            
-            #Wait for the thread to complete with timeout
-            wavelengths, counts = spectrum_thread.join(timeout=10.0)
-            if wavelengths is None or counts is None:
-                raise TimeoutError("Spectrometer spectrum acquisition timed out. Check hardware trigger connection.")
-            print(f"Joined thread")    
-        else:
-            #Get wavelengths and intensities
-            print(f"running spectrum in else condition")  
-            wavelengths, counts = self.spectro.spectrum() 
-            self.spectro.features
-        return wavelengths, counts
+            logger.error(e, exc_info=True)
 
     def disconnect(self):
         """Disconnect spectrometer"""

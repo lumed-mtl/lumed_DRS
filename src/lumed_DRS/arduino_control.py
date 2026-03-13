@@ -7,12 +7,12 @@ from threading import Lock
 import time as tt
 #import logger
 class Arduino:
-    def __init__(self) -> None:
+    def __init__(self, usb_lock=None) -> None:
         self.comport: str | None = None #communication port on which the arduino is connected via usb
         self.arduino_DRS_resource : str | None = None #communication resource on which the arduino is connected via usb
         self.pyvisa_serial: pyvisa.resources.serial.SerialInstrument | None = None
         self.isconnected: bool = False
-        self._mutex: Lock = Lock()
+        self._mutex: Lock = usb_lock if usb_lock is not None else Lock()
         self.resource_manage = pyvisa.ResourceManager("@py")
 
 
