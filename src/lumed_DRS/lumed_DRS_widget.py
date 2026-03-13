@@ -940,6 +940,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         """
         try:
             hardware_min_exposure, hardware_max_exposure = self.mayaspectro.get_exposure_time_lims() #minimal exposure time in ms (/1000 to convert from micro seconds to ms)
+            hardware_min_exposure = hardware_min_exposure+1
             hardware_max_count = self.mayaspectro.get_max_intensity()
             if max_acq_exp > hardware_max_exposure:
                 max_acq_exp = hardware_max_exposure
@@ -969,7 +970,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         self.lamp.set_shutter_position(shutter_position)
         self.enable_lamp() #Start illumination
         print(f'Exposures used for count determination: min exposure = {exposures[0]} ms, max exposure = {exposures[1]} ms')
-        logger.info("Taking acquisition with given AEC exposures")
+        logger.info(f"Taking acquisition with given AEC exposures of {exposures[0]} and {exposures[1]} ms")
         count_min_exposure = self.mayaspectro.spectrum_acquisition(exposures[0])[1]
         count_max_exposure = self.mayaspectro.spectrum_acquisition(exposures[1])[1]
     
@@ -1044,7 +1045,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         a = (max_counts[1]-max_counts[0])/(exposures[1]-exposures[0])
         b = max_counts[1]-(a*exposures[1])
         optimal_exp = (target_count - b)/a
-        
+        logger.info(f"Found optimal exposure to be {optimal_exp} ms")
         if optimal_exp > hardware_max_exposure:
             optimal_exp = hardware_max_exposure
             logger.warning("The optimal exposure is higher than the hardware maximum. Exposure set to hardware maximum: %f ms", hardware_max_exposure)
@@ -1058,17 +1059,17 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
             logger.warning("The optimal exposure is higher than the maximum set by user. Exposure set to user maximum: %f ms", max_acq_exp)
 
         elif optimal_exp <= min_acq_exp:
-            optimal_exp = min_acq_exp
-            logger.warning("The optimal exposure is higher than the minimum set by user. Exposure set to user minimum: %f ms", min_acq_exp)
+            optimal_exp = min_acq_exp+1
+            logger.warning("The optimal exposure is lower than the minimum set by user. Exposure set to user minimum: %f ms", min_acq_exp)
 
         opt_exp_measured_count = self.mayaspectro.spectrum_acquisition(optimal_exp)[1]
 
         real_max_count = np.max(opt_exp_measured_count)
         #self.disable_lamp() #Stop illumination
-        print(f"-------AEC DONE-------")
-        print(f"Final AEC values: exposures = {exposures} ms with counts = {max_counts}")
-        print(f"AEC extrapolation parameters: a = {a}, b = {b}")
-        print(f"Target count of {target_count} used to find optimal exposure: {optimal_exp} ms, with max count of {real_max_count}")
+        logger.info(f"-------AEC DONE-------")
+        logger.info(f"Final AEC values: exposures = {exposures} ms with max counts = {max_counts}")
+        logger.info(f"AEC extrapolation parameters: a = {a}, b = {b}")
+        logger.info(f"Target count of {target_count} used to find optimal exposure: {optimal_exp} ms, with max count of {real_max_count}")
         logger.info(f"Target count of {target_count} used to find optimal exposure: {optimal_exp} ms, with max count of {real_max_count}")
         return optimal_exp
 

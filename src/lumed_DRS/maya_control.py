@@ -5,6 +5,7 @@ from seabreeze.spectrometers import list_devices, Spectrometer
 import time as tt
 import importlib.util
 from arduino_control import Arduino
+import numpy as np
 
 try:
     from worker import CustomThread
@@ -108,8 +109,8 @@ class MayaSpectrometer:
         # Set exposure time
         print("-------------before try")
         try:
-            print(f"Setting exposure time to {int(exposure_time)} ms")
-            self.spectro.integration_time_micros(int(exposure_time) * 1000)  # *1000 because the exposure time is given in microseconds to the function
+            print(f"Setting exposure time to {np.round(exposure_time).astype(int)} ms") #
+            self.spectro.integration_time_micros(np.round(exposure_time).astype(int)*1000)  # np.round(exposure_time).astype(int)*1000 because the exposure time is given in microseconds to the function
         except Exception as e:
             print(f"Error during integration time setting: {e}")
             raise Exception
@@ -122,7 +123,7 @@ class MayaSpectrometer:
             print(f"STARTED THREAD:")
             #Small delay to ensure spectrum() is actually running and waiting for trigger
             tt.sleep(0.1)
-            # trigger pulse after thread is listening
+            #trigger pulse after thread is listening
             self.arduino.generate_pulse()
             print(f"Generated pulse")     
             
