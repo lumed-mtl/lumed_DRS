@@ -154,7 +154,7 @@ class MayaSpectrometer:
             try:
                 logger.info(f"Setting exposure time to {np.round(exposure_time).astype(int)} ms") #
                 with self._usb_lock:
-                    self.spectro.integration_time_micros(np.round(exposure_time).astype(int)*1000)  # np.round(exposure_time).astype(int)*1000 because the exposure time is given in microseconds to the function 
+                    self.spectro.integration_time_micros(int(np.round(exposure_time)*1000))  # np.round(exposure_time).astype(int)*1000 because the exposure time is given in microseconds to the function 
                 tt.sleep(0.05)           
             except Exception as e:
                 logger.error(e, exc_info=True)
@@ -168,7 +168,7 @@ class MayaSpectrometer:
                 spectrum_thread.start()
                 logger.info(f"Started spectrum thread") 
                 #Small delay to ensure spectrum() is actually running and waiting for trigger
-                tt.sleep(0.1)
+                tt.sleep(0.05)
                 #trigger pulse after thread is listening
                 self.arduino.generate_pulse()
                 print(f"Generated pulse")     
