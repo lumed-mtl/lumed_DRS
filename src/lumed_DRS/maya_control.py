@@ -73,6 +73,7 @@ class MayaSpectrometer:
         self.trigger_mode = 0 
         self.info = SpectroInfo()
         self._usb_lock = Lock()
+        self._acq_lock = Lock()  # serialize spectrum acquisition calls (prevent concurrent spectro access)
     def find_spectros(self):
         """
         find_spectros finds available devices
@@ -149,44 +150,63 @@ class MayaSpectrometer:
         ## Returns:
         combined array of wavelengths and measured intensities
         """
-        # Set exposure time
-        try:
+        with self._acq_lock:
             try:
-                logger.info(f"Setting exposure time to {np.round(exposure_time).astype(int)} ms") #
-                with self._usb_lock:
-                    self.spectro.integration_time_micros(int(np.round(exposure_time)*1000))  # np.round(exposure_time).astype(int)*1000 because the exposure time is given in microseconds to the function 
-                tt.sleep(0.05)           
+                # Always set exposure first in a USB-safe block.
+                try:
+                    rounded_us_exp = int(np.round(exposure_time * 1000))
+                    logger.info(f"Setting exposure time to {rounded_us_exp/1000:.3f} ms ({rounded_us_exp} µs)")
+                    with self._usb_lock:
+                        self.spectro.integration_time_micros(rounded_us_exp)
+                    tt.sleep(0.05)
+                except Exception as e:
+                    logger.error("Error during integration time setting", exc_info=True)
+                    raise
+
+                logger.info(f"acquisition with trigger mode: {self.trigger_mode}")
+
+                if self.trigger_mode == 3:
+                    # Start the spectrometer acquisition in a dedicated thread, then pulse Arduino.
+                    def _capture_spectrum():
+                        return self.spectro.spectrum()
+
+                    spectrum_thread = CustomThread(target=_capture_spectrum)
+                    spectrum_thread.daemon = True
+                    spectrum_thread.start()
+                    logger.debug("Started external trigger spectrum worker")
+
+                    tt.sleep(0.05)  # small delay to ensure spectrometer has armed itself
+
+                    with self._usb_lock:
+                        self.arduino.generate_pulse()
+                        logger.info("Generated pulse")
+
+                    result = spectrum_thread.join(timeout=10.0)
+                    if result is None:
+                        raise TimeoutError("Spectrometer spectrum acquisition timed out. Check hardware trigger connection.")
+                    wavelengths, counts = result
+                    logger.info("Joined spectrum worker")
+
+                else:
+                    with self._usb_lock:
+                        wavelengths, counts = self.spectro.spectrum()
+
+                # Eagerly request features to warm up if available (no block)
+                try:
+                    _ = self.spectro.features
+                except Exception:
+                    pass
+
+                return wavelengths, counts
+
             except Exception as e:
-                logger.error(e, exc_info=True)
-                print(f"Error during integration time setting: {e}")
-                raise Exception
-            logger.info(f"acquisition with trigger mode:{self.trigger_mode}")
-            if self.trigger_mode == 3:
-                #Start the spectrum acquisition thread
-                spectrum_thread = CustomThread(target=self.spectro.spectrum)
-                logger.info(f"Initialized spectrum thread") 
-                spectrum_thread.start()
-                logger.info(f"Started spectrum thread") 
-                #Small delay to ensure spectrum() is actually running and waiting for trigger
-                tt.sleep(0.05)
-                #trigger pulse after thread is listening
-                self.arduino.generate_pulse()
-                print(f"Generated pulse")     
-                logger.info(f"Generated pulse") 
-                #Wait for the thread to complete with timeout
-                wavelengths, counts = spectrum_thread.join(timeout=10.0)
-                if wavelengths is None or counts is None:
-                    raise TimeoutError("Spectrometer spectrum acquisition timed out. Check hardware trigger connection.")
-                logger.info(f"Joined thread")    
-            else:
-                #Get wavelengths and intensities
-                print(f"running spectrum in else condition")  
-                with self._usb_lock:
-                    wavelengths, counts = self.spectro.spectrum() 
-                self.spectro.features
-            return wavelengths, counts
-        except Exception as e:
-            logger.error(e, exc_info=True)
+                logger.error("Spectrum acquisition failed", exc_info=True)
+                # On hardware errors, attempt to reconnect on next call (best-effort)
+                try:
+                    self.spectro.close()
+                except Exception:
+                    pass
+                raise
 
     def disconnect(self):
         """Disconnect spectrometer"""
