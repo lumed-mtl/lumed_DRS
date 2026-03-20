@@ -163,50 +163,73 @@ class MayaSpectrometer:
                     logger.error("Error during integration time setting", exc_info=True)
                     raise
 
-                logger.info(f"acquisition with trigger mode: {self.trigger_mode}")
+                #logger.info(f"acquisition with trigger mode: {self.trigger_mode}")
 
+            #     if self.trigger_mode == 3:
+            #         # Start the spectrometer acquisition in a dedicated thread, then pulse Arduino.
+            #         def _capture_spectrum():
+            #             return self.spectro.spectrum()
+
+            #         spectrum_thread = CustomThread(target=self.spectro.spectrum)
+            #         spectrum_thread.daemon = True
+            #         spectrum_thread.start()
+            #         logger.debug("Started external trigger spectrum worker")
+
+            #         tt.sleep(0.1)  # small delay to ensure spectrometer has armed itself
+
+            #         with self._usb_lock:
+            #             self.arduino.generate_pulse()
+            #             logger.info("Generated pulse")
+
+            #         result = spectrum_thread.join(timeout=10.0)
+            #         if result is None:
+            #             raise TimeoutError("Spectrometer spectrum acquisition timed out. Check hardware trigger connection.")
+            #         wavelengths, counts = result
+            #         logger.info("Joined spectrum worker")
+
+            #     else:
+            #         with self._usb_lock:
+            #             wavelengths, counts = self.spectro.spectrum()
+
+            #     # Eagerly request features to warm up if available (no block)
+            #     try:
+            #         _ = self.spectro.features
+            #     except Exception:
+            #         pass
+
+            #     return wavelengths, counts
+
+            
+                logger.info(f"acquisition with trigger mode:{self.trigger_mode}")
                 if self.trigger_mode == 3:
-                    # Start the spectrometer acquisition in a dedicated thread, then pulse Arduino.
-                    def _capture_spectrum():
-                        return self.spectro.spectrum()
-
-                    spectrum_thread = CustomThread(target=_capture_spectrum)
-                    spectrum_thread.daemon = True
+                    #Start the spectrum acquisition thread
+                    #with self._usb_lock:
+                    spectrum_thread = CustomThread(target=self.spectro.spectrum)
+                    logger.info(f"Initialized spectrum thread") 
                     spectrum_thread.start()
-                    logger.debug("Started external trigger spectrum worker")
-
-                    tt.sleep(0.05)  # small delay to ensure spectrometer has armed itself
-
-                    with self._usb_lock:
-                        self.arduino.generate_pulse()
-                        logger.info("Generated pulse")
-
-                    result = spectrum_thread.join(timeout=10.0)
-                    if result is None:
+                    logger.info(f"Started spectrum thread") 
+                    #Small delay to ensure spectrum() is actually running and waiting for trigger
+                    tt.sleep(0.05)
+                    #trigger pulse after thread is listening
+                    self.arduino.generate_pulse()
+                    print(f"Generated pulse")     
+                    logger.info(f"Generated pulse") 
+                    #Wait for the thread to complete with timeout
+                    wavelengths, counts = spectrum_thread.join(timeout=10.0)
+                    if wavelengths is None or counts is None:
                         raise TimeoutError("Spectrometer spectrum acquisition timed out. Check hardware trigger connection.")
-                    wavelengths, counts = result
-                    logger.info("Joined spectrum worker")
-
+                    logger.info(f"Joined thread")    
                 else:
+                    #Get wavelengths and intensities
+                    print(f"running spectrum in else condition")  
                     with self._usb_lock:
-                        wavelengths, counts = self.spectro.spectrum()
-
-                # Eagerly request features to warm up if available (no block)
-                try:
-                    _ = self.spectro.features
-                except Exception:
-                    pass
-
+                        wavelengths, counts = self.spectro.spectrum() 
+                    self.spectro.features
                 return wavelengths, counts
-
             except Exception as e:
-                logger.error("Spectrum acquisition failed", exc_info=True)
-                # On hardware errors, attempt to reconnect on next call (best-effort)
-                try:
-                    self.spectro.close()
-                except Exception:
-                    pass
-                raise
+                logger.error(e, exc_info=True)
+                print(f"Error during integration time setting: {e}")
+                raise Exception
 
     def disconnect(self):
         """Disconnect spectrometer"""
@@ -256,7 +279,7 @@ if __name__ == "__main__":
     # spectro.device = spectro.find_spectros()[0]
     # print("available devices:", spectro.find_spectros())
     # print("Maya available:", spectro.is_spectro_available())
-    # # spectro.connect2()
+    # # spectro.connect()
     # # print(type(spectro.spectro))
     # spectro.connect()
     # print(type(spectro.spectro))
