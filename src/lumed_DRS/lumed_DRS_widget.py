@@ -752,13 +752,18 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         try:
             if data_list is None:
                 data_list = self.saved_data_list
+            def data_list_sort(data):
+                print("index:", int(data['acquisition_name'][data['acquisition_name'].index('_')+1:]))
+                return int(data['acquisition_name'][data['acquisition_name'].index('_')+1:])
+            data_list = sorted(data_list, key = data_list_sort)
             print("Before self.comboBoxAcqName.currentIndex(): ",self.comboBoxAcqName.currentIndex(), 'self.comboBoxAcqName.currentText():', self.comboBoxAcqName.currentText())
             self.comboBoxAcqName.blockSignals(True)
             self.comboBoxAcqName.clear()
             print("Constructing combobox...")
             for data in data_list:
                 try:
-                    self.comboBoxAcqName.addItem(data['acquisition_name'], data) # the data is linked to each combobox space
+                    print("acquisition name: in combobox:", data['acquisition_name'], data_list_sort(data))
+                    self.comboBoxAcqName.addItem(data['acquisition_name']+': '+data['comment'], data) # the data is linked to each combobox space
                 except Exception as e:
                     logger.error(e, exc_info=True) 
                      
