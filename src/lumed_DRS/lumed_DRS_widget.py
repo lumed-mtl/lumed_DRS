@@ -637,8 +637,8 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         Returns:
             None
         """
-        acq_name = current_data['acquisition_name']
-        self.comboBoxAcqName.insertItem(0, acq_name, current_data)
+        combobox_slot_name = current_data['acquisition_name']+': '+current_data['comment']
+        self.comboBoxAcqName.insertItem(0, combobox_slot_name, current_data)
         self.comboBoxAcqName.setCurrentIndex(0)
 
     def display_saved_data(self):
