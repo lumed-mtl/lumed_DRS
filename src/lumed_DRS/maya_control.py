@@ -152,7 +152,7 @@ class MayaSpectrometer:
         """
         with self._acq_lock:
             try:
-                # Always set exposure first in a USB-safe block.
+                # set exposure first in a USB-safe block.
                 try:
                     rounded_us_exp = int(np.round(exposure_time * 1000))
                     logger.info(f"Setting exposure time to {rounded_us_exp/1000:.3f} ms ({rounded_us_exp} µs)")
@@ -162,43 +162,6 @@ class MayaSpectrometer:
                 except Exception as e:
                     logger.error("Error during integration time setting", exc_info=True)
                     raise
-
-                #logger.info(f"acquisition with trigger mode: {self.trigger_mode}")
-
-            #     if self.trigger_mode == 3:
-            #         # Start the spectrometer acquisition in a dedicated thread, then pulse Arduino.
-            #         def _capture_spectrum():
-            #             return self.spectro.spectrum()
-
-            #         spectrum_thread = CustomThread(target=self.spectro.spectrum)
-            #         spectrum_thread.daemon = True
-            #         spectrum_thread.start()
-            #         logger.debug("Started external trigger spectrum worker")
-
-            #         tt.sleep(0.1)  # small delay to ensure spectrometer has armed itself
-
-            #         with self._usb_lock:
-            #             self.arduino.generate_pulse()
-            #             logger.info("Generated pulse")
-
-            #         result = spectrum_thread.join(timeout=10.0)
-            #         if result is None:
-            #             raise TimeoutError("Spectrometer spectrum acquisition timed out. Check hardware trigger connection.")
-            #         wavelengths, counts = result
-            #         logger.info("Joined spectrum worker")
-
-            #     else:
-            #         with self._usb_lock:
-            #             wavelengths, counts = self.spectro.spectrum()
-
-            #     # Eagerly request features to warm up if available (no block)
-            #     try:
-            #         _ = self.spectro.features
-            #     except Exception:
-            #         pass
-
-            #     return wavelengths, counts
-
             
                 logger.info(f"acquisition with trigger mode:{self.trigger_mode}")
                 if self.trigger_mode == 3:
