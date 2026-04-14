@@ -646,6 +646,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
         try:
             current_data = self.comboBoxAcqName.currentData()
             self.textEditComment.setPlainText(current_data["comment"]) #access the data linked to the combobox item
+            self.lineEditSetExposure.setText(str(round(current_data["drs_exposure"]))) #Display the saved DRS exposure time used for acquisition
             print("-----------DISPLAYING DATA-----------")
             # print("current data:", current_data)
             # print("name:", current_data['acquisition_name'])
@@ -810,7 +811,7 @@ class LumedDRSWidget(QMainWindow, Ui_Form):
     def get_acquisition_name(self) -> str:
         """Get acquisition name from UI text field, formatted as snake_case. An index is added to the measurement"""
         self.acqname = self.lineEditAcqName.text().replace(" ", "_")
-        all_combobox_acq_names = [self.comboBoxAcqName.itemText(i) for i in range(self.comboBoxAcqName.count())]
+        all_combobox_acq_names = [self.comboBoxAcqName.itemData(i)['acquisition_name'] for i in range(self.comboBoxAcqName.count())]
         new_acq_idx = 0
         for combobox_acq_name in all_combobox_acq_names:
             if self.acqname in combobox_acq_name:
@@ -1423,7 +1424,7 @@ None
                                                   (not self.is_measuring)and
                                                   (self.oras_status == "READY"))
         # update UI based on lamp_info and spectro_info
-        self.lineEditSetExposure.setText(self.aec_exposure)
+        self.lineEditSetExposure.setText(self.aec_exposure) 
         self.set_labels_connected(is_lamp_connected, is_spectro_connected)
         if is_lamp_connected == "True":
             self.set_label_lamp_enabled(self.lamp_info.is_enabled)
